@@ -1,0 +1,1158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harmonies Score Counter</title>
+<link rel="icon" href="assets/logo.png">
+<style>
+  :root{
+    --bg: #eee2c6;
+    --card: #fbf6e9;
+    --ink: #2f3b2f;
+    --muted: #6b7a6b;
+    --line: #ddd0ab;
+    --green: #4f8f6d;
+    --green-dark: #2d6e5e;
+    --blue: #3f7ea6;
+    --tan: #b98a4a;
+    --gray: #8a8578;
+    --red: #b0524a;
+    --yellow: #d1a239;
+    --accent: #e0871f;
+    --winner: #fbead0;
+    --accent-text: var(--green-dark);
+
+    /* real Harmonies token colors, from the rulebook component key */
+    --tok-water: #4a92ad;
+    --tok-mountain: #9a9690;
+    --tok-brown: #96603c;
+    --tok-tree: #8a9a3f;
+    --tok-field: #e8b93a;
+    --tok-building: #c1483f;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg: #1b211a;
+      --card: #262c23;
+      --ink: #ece6d6;
+      --muted: #a3ad98;
+      --line: #3c4436;
+      --winner: #40371f;
+      --accent-text: #7fd9ab;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg: #1b211a; --card: #262c23; --ink: #ece6d6; --muted: #a3ad98; --line: #3c4436; --winner: #40371f;
+    --accent-text: #7fd9ab;
+  }
+  :root[data-theme="light"]{
+    --bg: #eee2c6; --card: #fbf6e9; --ink: #2f3b2f; --muted: #6b7a6b; --line: #ddd0ab; --winner: #fbead0;
+  }
+  *{ box-sizing: border-box; }
+  html, body{
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+  body{
+    margin: 0;
+    font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background:
+      linear-gradient(rgba(255,251,240,0.55), rgba(255,251,240,0.55)),
+      var(--bg) url("assets/parchment-bg.jpg") center / cover fixed no-repeat;
+    color: var(--ink);
+    padding: 16px;
+    padding-bottom: 100px;
+    position: relative;
+    min-height: 100vh;
+  }
+  @media (prefers-color-scheme: dark){
+    body{
+      background:
+        linear-gradient(rgba(10,14,9,0.78), rgba(10,14,9,0.78)),
+        var(--bg) url("assets/parchment-bg.jpg") center / cover fixed no-repeat;
+    }
+  }
+  :root[data-theme="dark"] body{
+    background:
+      linear-gradient(rgba(10,14,9,0.78), rgba(10,14,9,0.78)),
+      var(--bg) url("assets/parchment-bg.jpg") center / cover fixed no-repeat;
+  }
+  :root[data-theme="light"] body{
+    background:
+      linear-gradient(rgba(255,251,240,0.55), rgba(255,251,240,0.55)),
+      var(--bg) url("assets/parchment-bg.jpg") center / cover fixed no-repeat;
+  }
+  .corner-critter{
+    position: fixed;
+    width: 130px;
+    opacity: 0.9;
+    pointer-events: none;
+    z-index: 0;
+    filter: drop-shadow(0 4px 10px rgba(0,0,0,0.15));
+  }
+  .corner-critter.fennec{
+    left: -18px;
+    bottom: -10px;
+    width: 150px;
+    transform: scaleX(-1);
+  }
+  .corner-critter.bird{
+    right: -10px;
+    top: 6px;
+    width: 100px;
+  }
+  @media (max-width: 700px){
+    .corner-critter{ display: none; }
+  }
+  .page-inner{
+    position: relative;
+    z-index: 1;
+  }
+  .logo-wrap{
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2px;
+  }
+  .logo-wrap img{
+    width: min(70vw, 300px);
+    height: auto;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));
+  }
+  @media (prefers-color-scheme: dark){
+    .logo-wrap img{ filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4)) brightness(1.15); }
+  }
+  h1{
+    font-size: 1.4rem;
+    margin: 4px 0 2px;
+    text-align: center;
+  }
+  .subtitle{
+    text-align: center;
+    color: var(--accent-text);
+    font-size: 0.85rem;
+    font-style: italic;
+    font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .global-settings{
+    max-width: 640px;
+    margin: 0 auto 16px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 12px 14px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 10px;
+  }
+  .toggle-group{
+    display: flex;
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+  .toggle-group button{
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    padding: 6px 14px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .toggle-group button.active{
+    background: var(--tok-water);
+    color: white;
+  }
+  .players{
+    max-width: 640px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .player-card{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 14px 14px;
+    position: relative;
+    box-shadow: 0 2px 10px rgba(60,45,20,0.06);
+    overflow: hidden;
+  }
+  .player-card::before{
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 5px;
+    background: linear-gradient(90deg,
+      var(--tok-water) 0 20%,
+      var(--tok-field) 20% 40%,
+      var(--tok-tree) 40% 60%,
+      var(--tok-mountain) 60% 80%,
+      var(--tok-building) 80% 100%);
+  }
+  .player-card.winner{
+    background: var(--winner);
+    border-color: var(--accent);
+    box-shadow: 0 4px 18px rgba(224,135,31,0.25);
+  }
+  .player-header{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .mascot{
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: center 20%;
+    background: var(--bg);
+    border: 2px solid var(--line);
+    flex-shrink: 0;
+  }
+  .player-card.winner .mascot{
+    border-color: var(--accent);
+  }
+  .player-header input[type="text"]{
+    flex: 1;
+    min-width: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    padding: 4px 2px;
+    border-bottom: 1px solid transparent;
+  }
+  .player-header input[type="text"]:focus{
+    outline: none;
+    border-bottom: 1px solid var(--line);
+  }
+  .remove-player{
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 2px 6px;
+  }
+  .total-badge{
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--accent-text);
+    min-width: 3ch;
+    text-align: right;
+  }
+  .category{
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: 6px 10px;
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+  }
+  .category:first-of-type{ border-top: none; }
+  .cat-label{
+    font-size: 0.88rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+  .tok-dot{
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    box-shadow: inset 0 -2px 2px rgba(0,0,0,0.25), inset 0 1px 1px rgba(255,255,255,0.4);
+    flex-shrink: 0;
+  }
+  .cat-hint{
+    font-size: 0.74rem;
+    color: var(--muted);
+    grid-column: 1 / -1;
+    margin-top: -2px;
+  }
+  .cat-pts{
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--accent-text);
+    text-align: right;
+  }
+  .subrow{
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .stack-input{
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 4px 6px;
+  }
+  .stack-input label{
+    font-size: 0.72rem;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .stack-input input{
+    width: 2.6em;
+    border: none;
+    background: transparent;
+    color: var(--ink);
+    font-size: 0.95rem;
+    text-align: center;
+  }
+  .stack-input input:focus{ outline: none; }
+  .num-input{
+    width: 3.2em;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 8px;
+    padding: 4px 4px;
+    font-size: 0.95rem;
+    text-align: center;
+  }
+  .animal-list{
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .animal-row{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .animal-row input[type="number"]{
+    width: 4em;
+  }
+  .animal-row button{
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  .add-btn{
+    align-self: flex-start;
+    border: 1px dashed var(--line);
+    background: transparent;
+    color: var(--accent-text);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-top: 2px;
+  }
+  .footer-bar{
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--card);
+    border-top: 1px solid var(--line);
+    padding: 10px 16px;
+    display: none;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    z-index: 2;
+  }
+  .footer-bar button{
+    border: none;
+    border-radius: 999px;
+    padding: 10px 20px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  #addPlayer{
+    background: var(--green-dark);
+    color: white;
+  }
+  #saveGame{
+    background: var(--accent);
+    color: white;
+  }
+  #saveGame:disabled{
+    opacity: 0.6;
+    cursor: default;
+  }
+  #resetAll{
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--line) !important;
+  }
+  .crown{
+    font-size: 0.9rem;
+    margin-left: 4px;
+  }
+
+  .view{ display: none; }
+  .view.active{ display: block; }
+
+  .top-links{
+    max-width: 640px;
+    margin: 0 auto 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .link-btn{
+    border: none;
+    background: transparent;
+    color: var(--accent-text);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 4px 2px;
+  }
+
+  .landing-card{
+    max-width: 480px;
+    margin: 0 auto;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 16px;
+    box-shadow: 0 2px 10px rgba(60,45,20,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .landing-row{
+    display: flex;
+    gap: 8px;
+  }
+  #landingName{
+    flex: 1;
+    min-width: 0;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    color: var(--ink);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 1rem;
+    font-family: inherit;
+  }
+  .btn-primary{
+    border: none;
+    background: var(--green-dark);
+    color: white;
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-primary:disabled{
+    opacity: 0.5;
+    cursor: default;
+  }
+  .chip-row{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chip{
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 6px 6px 6px 12px;
+    font-size: 0.85rem;
+  }
+  .chip button{
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--ink);
+    font-weight: 600;
+    padding: 2px 2px;
+  }
+  .chip-history{
+    border-radius: 50%;
+    padding: 4px 6px !important;
+    color: var(--muted) !important;
+    font-weight: 400 !important;
+  }
+  .chip-meta{
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+  .landing-hint{
+    text-align: center;
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .save-banner{
+    max-width: 640px;
+    margin: 0 auto 14px;
+    border-radius: 12px;
+    padding: 12px 14px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: none;
+  }
+  .save-banner.visible{ display: block; }
+  .save-banner.celebrate{
+    background: var(--winner);
+    border: 1px solid var(--accent);
+    color: var(--ink);
+  }
+  .save-banner.info{
+    background: var(--card);
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .save-banner.error{
+    background: var(--card);
+    border: 1px solid var(--red);
+    color: var(--red);
+  }
+  .save-banner .retry-btn{
+    display: block;
+    margin-top: 6px;
+    border: none;
+    background: transparent;
+    color: var(--accent-text);
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .history-card{
+    max-width: 480px;
+    margin: 0 auto;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 18px 16px;
+    box-shadow: 0 2px 10px rgba(60,45,20,0.06);
+  }
+  .history-title{
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 0 0 4px;
+  }
+  .history-highscore{
+    color: var(--accent-text);
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .history-row{
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+    font-size: 0.9rem;
+  }
+  .history-row:first-of-type{ border-top: none; }
+  .history-row.is-best{
+    color: var(--accent-text);
+    font-weight: 700;
+  }
+  .history-empty, .chip-loading{
+    color: var(--muted);
+    font-size: 0.85rem;
+    text-align: center;
+  }
+
+  .citation-footer{
+    text-align: center;
+    font-size: 0.7rem;
+    font-style: italic;
+    color: var(--muted);
+    margin: 24px 0 8px;
+  }
+</style>
+</head>
+<body>
+
+<img class="corner-critter fennec" src="assets/animal-fennec.png" alt="" aria-hidden="true">
+<img class="corner-critter bird" src="assets/animal-bird.png" alt="" aria-hidden="true">
+
+<div class="page-inner">
+
+<div class="logo-wrap">
+  <img src="assets/logo.png" alt="Harmonies">
+</div>
+
+<div class="view active" id="view-landing">
+  <div class="subtitle">Who's tallying tonight?</div>
+  <div class="landing-card">
+    <div class="landing-row">
+      <input type="text" id="landingName" placeholder="Your name" autocomplete="off">
+      <button id="landingContinue" class="btn-primary" disabled>Continue</button>
+    </div>
+    <div id="landingChips" class="chip-row"></div>
+    <div class="landing-hint">
+      <button id="landingSkip" class="link-btn">Just tally a game →</button>
+    </div>
+  </div>
+</div>
+
+<div class="view" id="view-scorer">
+  <div class="top-links">
+    <button id="switchPlayer" class="link-btn">🏠 Switch player</button>
+    <span></span>
+  </div>
+  <div class="subtitle">Tally end-of-game scores — enter what's on your board and cards</div>
+
+  <div class="global-settings">
+    <span style="font-size:0.85rem; font-weight:700; color: var(--accent-text);">Water side</span>
+    <div class="toggle-group" id="waterToggle">
+      <button data-side="river" class="active">River (A)</button>
+      <button data-side="island">Islands (B)</button>
+    </div>
+  </div>
+
+  <div id="saveBanner" class="save-banner"></div>
+
+  <div class="players" id="players"></div>
+</div>
+
+<div class="view" id="view-history">
+  <div class="top-links">
+    <button id="historyBack" class="link-btn">← Back</button>
+    <span></span>
+  </div>
+  <div class="history-card">
+    <div class="history-title" id="historyName"></div>
+    <div class="history-highscore" id="historyHighScore"></div>
+    <div id="historyList"></div>
+  </div>
+</div>
+
+<div class="citation-footer">Benvenuto, J. (2024). Harmonies [Board game]. Libellud.</div>
+
+</div><!-- /.page-inner -->
+
+<div class="footer-bar" id="footerBar">
+  <button id="addPlayer">+ Add player</button>
+  <button id="saveGame" class="btn-primary">Save this game</button>
+  <button id="resetAll">Reset all</button>
+</div>
+
+<script>
+const STACK_PTS = { h1: 1, h2: 3, h3: 7 };
+
+let waterSide = "river";
+let players = [];
+let nextId = 1;
+
+function newPlayer(name){
+  return {
+    id: nextId++,
+    name: name || "Player " + nextId,
+    trees: { h1: 0, h2: 0, h3: 0 },
+    mountains: { h1: 0, h2: 0, h3: 0 },
+    fields: 0,
+    buildings: 0,
+    river: 0,
+    islands: 1,
+    animals: [0],
+    bonus: 0
+  };
+}
+
+function numOf(v){
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function stackPoints(stack){
+  return numOf(stack.h1) * STACK_PTS.h1 + numOf(stack.h2) * STACK_PTS.h2 + numOf(stack.h3) * STACK_PTS.h3;
+}
+
+function riverPoints(len){
+  len = Math.max(0, Math.trunc(numOf(len)));
+  if (len < 2) return 0;
+  const table = { 2: 2, 3: 5, 4: 8, 5: 11, 6: 15 };
+  if (len <= 6) return table[len];
+  return 15 + (len - 6) * 4;
+}
+
+function animalPoints(p){
+  return p.animals.reduce((sum, v) => sum + numOf(v), 0);
+}
+
+function waterPoints(p){
+  return waterSide === "river" ? riverPoints(p.river) : Math.max(1, numOf(p.islands)) * 5;
+}
+
+const MASCOTS = [
+  "assets/animal-fennec.png",
+  "assets/animal-rabbit.png",
+  "assets/animal-bird.png",
+  "assets/animal-boar.png",
+  "assets/animal-mouse.png"
+];
+
+function totalPoints(p){
+  return stackPoints(p.trees)
+    + stackPoints(p.mountains)
+    + numOf(p.fields) * 5
+    + numOf(p.buildings) * 5
+    + waterPoints(p)
+    + animalPoints(p)
+    + numOf(p.bonus);
+}
+
+function render(){
+  const active = document.activeElement;
+  let focusUid = null, selStart = null, selEnd = null;
+  if (active && active.dataset && active.dataset.uid){
+    focusUid = active.dataset.uid;
+    if (typeof active.selectionStart === "number"){
+      selStart = active.selectionStart;
+      selEnd = active.selectionEnd;
+    }
+  }
+
+  const container = document.getElementById("players");
+  container.innerHTML = "";
+
+  const totals = players.map(totalPoints);
+  const maxTotal = totals.length ? Math.max(...totals) : -1;
+  const winners = totals.filter(t => t === maxTotal && maxTotal > 0).length;
+
+  players.forEach((p, idx) => {
+    const total = totals[idx];
+    const isWinner = total === maxTotal && maxTotal > 0 && players.length > 1;
+
+    const card = document.createElement("div");
+    card.className = "player-card" + (isWinner ? " winner" : "");
+
+    card.innerHTML = `
+      <div class="player-header">
+        <img class="mascot" src="${MASCOTS[idx % MASCOTS.length]}" alt="">
+        <input type="text" value="${escapeAttr(p.name)}" data-role="name" data-uid="p${p.id}-name" />
+        ${isWinner && winners === 1 ? '<span class="crown">👑</span>' : ''}
+        <span class="total-badge">${total}</span>
+        ${players.length > 1 ? '<button class="remove-player" data-role="remove">✕</button>' : ''}
+      </div>
+
+      <div class="category">
+        <div class="cat-label"><span class="tok-dot" style="background:var(--tok-tree)"></span>Trees</div>
+        <div class="cat-pts">${stackPoints(p.trees)}</div>
+        <div class="subrow">
+          ${stackField(p.id, "trees", "h1", p.trees.h1, "×1")}
+          ${stackField(p.id, "trees", "h2", p.trees.h2, "×3")}
+          ${stackField(p.id, "trees", "h3", p.trees.h3, "×7")}
+        </div>
+        <div class="cat-hint">1 green token on 0/1/2 brown = height 1/2/3, scoring 1/3/7 each</div>
+      </div>
+
+      <div class="category">
+        <div class="cat-label"><span class="tok-dot" style="background:var(--tok-mountain)"></span>Mountains</div>
+        <div class="cat-pts">${stackPoints(p.mountains)}</div>
+        <div class="subrow">
+          ${stackField(p.id, "mountains", "h1", p.mountains.h1, "×1")}
+          ${stackField(p.id, "mountains", "h2", p.mountains.h2, "×3")}
+          ${stackField(p.id, "mountains", "h3", p.mountains.h3, "×7")}
+        </div>
+        <div class="cat-hint">Only count mountains adjacent to another mountain — scores 1/3/7 by height, else 0</div>
+      </div>
+
+      <div class="category">
+        <div class="cat-label"><span class="tok-dot" style="background:var(--tok-field)"></span>Fields</div>
+        <div class="cat-pts">${numOf(p.fields) * 5}</div>
+        <div class="subrow">
+          ${numField(p.id, "fields", p.fields, "# of fields")}
+        </div>
+        <div class="cat-hint">Each group of 2+ contiguous yellow tokens = 1 field, 5 pts each</div>
+      </div>
+
+      <div class="category">
+        <div class="cat-label"><span class="tok-dot" style="background:var(--tok-building)"></span>Buildings</div>
+        <div class="cat-pts">${numOf(p.buildings) * 5}</div>
+        <div class="subrow">
+          ${numField(p.id, "buildings", p.buildings, "# of buildings")}
+        </div>
+        <div class="cat-hint">Red on brown/gray/red, surrounded by 3+ differently colored tokens — 5 pts each</div>
+      </div>
+
+      <div class="category">
+        <div class="cat-label"><span class="tok-dot" style="background:var(--tok-water)"></span>${waterSide === "river" ? "River" : "Islands"}</div>
+        <div class="cat-pts">${waterPoints(p)}</div>
+        <div class="subrow">
+          ${waterSide === "river"
+            ? numField(p.id, "river", p.river, "longest river length")
+            : numField(p.id, "islands", p.islands, "# of islands")}
+        </div>
+        <div class="cat-hint">${waterSide === "river"
+          ? "Shortest path length of your longest river: 2→2, 3→5, 4→8, 5→11, 6→15, +4 per token beyond 6"
+          : "5 pts per island (area cut off by blue tokens) — you always have at least 1"}</div>
+      </div>
+
+      <div class="category">
+        <div class="cat-label"><span class="tok-dot" style="background:var(--tok-brown)"></span>Animal cards</div>
+        <div class="cat-pts">${animalPoints(p)}</div>
+        <div class="animal-list">
+          ${p.animals.map((v, i) => `
+            <div class="animal-row">
+              <input type="number" min="0" value="${v}" data-role="animal" data-index="${i}" data-uid="p${p.id}-animal-${i}" />
+              <span class="cat-hint" style="margin:0;">pts on topmost empty slot</span>
+              ${p.animals.length > 1 ? `<button data-role="removeAnimal" data-index="${i}">✕</button>` : ''}
+            </div>
+          `).join("")}
+          <button class="add-btn" data-role="addAnimal">+ Add card</button>
+        </div>
+      </div>
+
+      <div class="category">
+        <div class="cat-label"><span class="tok-dot" style="background:var(--accent)"></span>Nature Spirit / bonus</div>
+        <div class="cat-pts">${numOf(p.bonus)}</div>
+        <div class="subrow">
+          ${numField(p.id, "bonus", p.bonus, "extra points")}
+        </div>
+        <div class="cat-hint">Read directly off any Nature Spirit card effect</div>
+      </div>
+    `;
+
+    container.appendChild(card);
+    wireCard(card, p);
+  });
+
+  if (focusUid){
+    const el = container.querySelector(`[data-uid="${focusUid}"]`);
+    if (el){
+      el.focus();
+      if (selStart !== null && el.setSelectionRange){
+        try { el.setSelectionRange(selStart, selEnd); } catch (e) {}
+      }
+    }
+  }
+}
+
+function stackField(playerId, cat, key, value, mult){
+  return `
+    <div class="stack-input">
+      <label>${mult}</label>
+      <input type="number" min="0" value="${value}" data-role="stack" data-cat="${cat}" data-key="${key}" data-uid="p${playerId}-${cat}-${key}" />
+    </div>
+  `;
+}
+
+function numField(playerId, role, value, placeholder){
+  return `<input class="num-input" type="number" min="0" value="${value}" data-role="${role}" placeholder="${placeholder}" data-uid="p${playerId}-${role}" />`;
+}
+
+function escapeAttr(s){
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function wireCard(card, p){
+  card.querySelector('[data-role="name"]').addEventListener("input", e => {
+    p.name = e.target.value;
+  });
+
+  const removeBtn = card.querySelector('[data-role="remove"]');
+  if (removeBtn){
+    removeBtn.addEventListener("click", () => {
+      players = players.filter(pl => pl.id !== p.id);
+      render();
+    });
+  }
+
+  card.querySelectorAll('[data-role="stack"]').forEach(input => {
+    input.addEventListener("input", e => {
+      const cat = e.target.dataset.cat;
+      const key = e.target.dataset.key;
+      p[cat][key] = e.target.value;
+      render();
+    });
+  });
+
+  ["fields", "buildings", "river", "islands", "bonus"].forEach(role => {
+    const input = card.querySelector(`[data-role="${role}"]`);
+    if (input){
+      input.addEventListener("input", e => {
+        p[role] = e.target.value;
+        render();
+      });
+    }
+  });
+
+  card.querySelectorAll('[data-role="animal"]').forEach(input => {
+    input.addEventListener("input", e => {
+      const i = Number(e.target.dataset.index);
+      p.animals[i] = e.target.value;
+      render();
+    });
+  });
+
+  card.querySelectorAll('[data-role="removeAnimal"]').forEach(btn => {
+    btn.addEventListener("click", e => {
+      const i = Number(e.target.dataset.index);
+      p.animals.splice(i, 1);
+      render();
+    });
+  });
+
+  const addAnimalBtn = card.querySelector('[data-role="addAnimal"]');
+  if (addAnimalBtn){
+    addAnimalBtn.addEventListener("click", () => {
+      p.animals.push(0);
+      render();
+    });
+  }
+}
+
+document.getElementById("waterToggle").addEventListener("click", e => {
+  const btn = e.target.closest("button[data-side]");
+  if (!btn) return;
+  waterSide = btn.dataset.side;
+  document.querySelectorAll("#waterToggle button").forEach(b => b.classList.toggle("active", b === btn));
+  render();
+});
+
+document.getElementById("addPlayer").addEventListener("click", () => {
+  players.push(newPlayer());
+  render();
+});
+
+document.getElementById("resetAll").addEventListener("click", () => {
+  if (confirm("Reset all players and scores?")){
+    players = [newPlayer("Player 1"), newPlayer("Player 2")];
+    nextId = 3;
+    render();
+    hideSaveBanner();
+  }
+});
+
+// ---- Views ----
+
+function showView(name){
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + name));
+  document.getElementById("footerBar").style.display = name === "scorer" ? "flex" : "none";
+  if (name === "landing") renderLandingChips();
+}
+
+function formatDate(iso){
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+// ---- Landing ----
+
+let chipsRequestId = 0;
+
+async function fetchProfiles(){
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const res = await fetch("/api/profiles", { signal: controller.signal });
+    if (!res.ok) throw new Error("bad_status");
+    const data = await res.json();
+    return data.profiles || [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function renderLandingChips(){
+  const container = document.getElementById("landingChips");
+  const requestId = ++chipsRequestId;
+  container.innerHTML = '<div class="chip-loading">Loading players…</div>';
+
+  let profiles;
+  try {
+    profiles = await fetchProfiles();
+  } catch (err) {
+    if (requestId !== chipsRequestId) return;
+    container.innerHTML = '<div class="chip-loading">Couldn\'t load saved players. <button class="link-btn" id="retryChips">Retry</button></div>';
+    const retry = document.getElementById("retryChips");
+    if (retry) retry.addEventListener("click", renderLandingChips);
+    return;
+  }
+
+  if (requestId !== chipsRequestId) return;
+
+  if (!profiles.length){
+    container.innerHTML = "";
+    return;
+  }
+
+  container.innerHTML = profiles.map(p => `
+    <div class="chip">
+      <button data-role="chip-continue" data-key="${escapeAttr(p.key)}" data-name="${escapeAttr(p.displayName)}">${escapeAttr(p.displayName)}</button>
+      <span class="chip-meta">🏆 ${numOf(p.highScore)}</span>
+      <button class="chip-history" data-role="chip-history" data-key="${escapeAttr(p.key)}" title="View history">📜</button>
+    </div>
+  `).join("");
+
+  container.querySelectorAll('[data-role="chip-continue"]').forEach(btn => {
+    btn.addEventListener("click", () => startScorerWithName(btn.dataset.name));
+  });
+  container.querySelectorAll('[data-role="chip-history"]').forEach(btn => {
+    btn.addEventListener("click", () => openHistory(btn.dataset.key));
+  });
+}
+
+function startScorerWithName(name){
+  players[0].name = name;
+  render();
+  showView("scorer");
+}
+
+const landingNameInput = document.getElementById("landingName");
+const landingContinueBtn = document.getElementById("landingContinue");
+
+landingNameInput.addEventListener("input", () => {
+  landingContinueBtn.disabled = !landingNameInput.value.trim();
+});
+landingNameInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && landingNameInput.value.trim()){
+    startScorerWithName(landingNameInput.value.trim());
+  }
+});
+landingContinueBtn.addEventListener("click", () => {
+  const name = landingNameInput.value.trim();
+  if (name) startScorerWithName(name);
+});
+document.getElementById("landingSkip").addEventListener("click", () => showView("scorer"));
+document.getElementById("switchPlayer").addEventListener("click", () => showView("landing"));
+
+// ---- Save this game ----
+
+function hideSaveBanner(){
+  const el = document.getElementById("saveBanner");
+  el.className = "save-banner";
+  el.innerHTML = "";
+}
+
+function renderSaveBanner(kind, html){
+  const el = document.getElementById("saveBanner");
+  el.className = "save-banner visible " + kind;
+  el.innerHTML = html;
+}
+
+async function saveGame(){
+  const btn = document.getElementById("saveGame");
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+
+  const payload = {
+    players: players.map(p => ({ name: p.name, total: totalPoints(p) }))
+  };
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    let res;
+    try {
+      res = await fetch("/api/save-game", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!res.ok) throw new Error("bad_status");
+    const data = await res.json();
+
+    if (data.celebrations && data.celebrations.length){
+      const lines = data.celebrations.map(c =>
+        `🎉 New high score for ${escapeAttr(c.displayName)} — ${c.total} (previous best ${c.previousHigh})!`
+      ).join("<br>");
+      renderSaveBanner("celebrate", lines);
+    } else if (data.saved && data.saved.length){
+      renderSaveBanner("info", `Saved ${data.saved.length} player${data.saved.length === 1 ? "" : "s"}' game${data.saved.length === 1 ? "" : "s"}.`);
+    } else {
+      renderSaveBanner("info", "No named players to save — give someone a real name first.");
+    }
+  } catch (err) {
+    renderSaveBanner("error", `Couldn't save — check your connection and try again. <button class="retry-btn" id="retrySave">Retry</button>`);
+    const retry = document.getElementById("retrySave");
+    if (retry) retry.addEventListener("click", saveGame);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Save this game";
+  }
+}
+
+document.getElementById("saveGame").addEventListener("click", saveGame);
+
+// ---- History ----
+
+let currentHistoryKey = null;
+let historyRequestId = 0;
+
+function openHistory(key){
+  currentHistoryKey = key;
+  showView("history");
+  renderHistory(key);
+}
+
+async function renderHistory(key){
+  const requestId = ++historyRequestId;
+  document.getElementById("historyName").textContent = "";
+  document.getElementById("historyHighScore").textContent = "";
+  document.getElementById("historyList").innerHTML = '<div class="history-empty">Loading…</div>';
+
+  let data;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    let res;
+    try {
+      res = await fetch("/api/profile?name=" + encodeURIComponent(key), { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (res.status === 404){
+      if (requestId !== historyRequestId) return;
+      document.getElementById("historyList").innerHTML = '<div class="history-empty">No history yet.</div>';
+      return;
+    }
+    if (!res.ok) throw new Error("bad_status");
+    data = await res.json();
+  } catch (err) {
+    if (requestId !== historyRequestId) return;
+    document.getElementById("historyList").innerHTML = '<div class="history-empty">Couldn\'t load history. <button class="link-btn" id="retryHistory">Retry</button></div>';
+    const retry = document.getElementById("retryHistory");
+    if (retry) retry.addEventListener("click", () => renderHistory(key));
+    return;
+  }
+
+  if (requestId !== historyRequestId) return;
+
+  document.getElementById("historyName").textContent = data.displayName;
+  document.getElementById("historyHighScore").textContent = "🏆 High score: " + data.highScore;
+  document.getElementById("historyList").innerHTML = data.games.map(g => `
+    <div class="history-row${g.total === data.highScore ? " is-best" : ""}">
+      <span>${formatDate(g.playedAt)}</span><span>${g.total}</span>
+    </div>
+  `).join("") || '<div class="history-empty">No games yet.</div>';
+}
+
+document.getElementById("historyBack").addEventListener("click", () => showView("landing"));
+
+// ---- Boot ----
+
+players = [newPlayer("Player 1"), newPlayer("Player 2")];
+render();
+showView("landing");
+</script>
+</body>
+</html>

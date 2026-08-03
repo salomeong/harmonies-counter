@@ -1,0 +1,12 @@
+node_modules/
+.vercel
+.env*.local
+.DS_Store
+
+# Reference-only source material (press kit, rulebook, review images) --
+# not part of the deployed site, kept locally for design reference only.
+EN LITE/
+*.pdf
+Harmonies-Board-Game-Review-Spirit-Cards.png
+harmonies-gioco-da-tavolo-asmodee.webp
+pic9705587.webp

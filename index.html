@@ -389,7 +389,7 @@
     opacity: 0.6;
     cursor: default;
   }
-  #resetAll{
+  #newGame{
     background: transparent;
     color: var(--muted);
     border: 1px solid var(--line) !important;
@@ -496,7 +496,10 @@
     color: var(--muted);
   }
   .landing-hint{
-    text-align: center;
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    flex-wrap: wrap;
     font-size: 0.78rem;
     color: var(--muted);
   }
@@ -568,6 +571,19 @@
     color: var(--accent-text);
     font-weight: 700;
   }
+  .history-row .rank{
+    width: 2em;
+    flex-shrink: 0;
+    color: var(--muted);
+  }
+  .history-row .name{
+    flex: 1;
+    text-align: left;
+  }
+  .history-row.top-3 .rank{
+    color: var(--accent-text);
+    font-weight: 700;
+  }
   .history-empty, .chip-loading{
     color: var(--muted);
     font-size: 0.85rem;
@@ -604,6 +620,7 @@
     <div id="landingChips" class="chip-row"></div>
     <div class="landing-hint">
       <button id="landingSkip" class="link-btn">Just tally a game →</button>
+      <button id="landingLeaderboard" class="link-btn">🏆 Leaderboard</button>
     </div>
   </div>
 </div>
@@ -611,7 +628,7 @@
 <div class="view" id="view-scorer">
   <div class="top-links">
     <button id="switchPlayer" class="link-btn">🏠 Switch player</button>
-    <span></span>
+    <button id="scorerLeaderboard" class="link-btn">🏆 Leaderboard</button>
   </div>
   <div class="subtitle">Tally end-of-game scores — enter what's on your board and cards</div>
 
@@ -640,6 +657,17 @@
   </div>
 </div>
 
+<div class="view" id="view-leaderboard">
+  <div class="top-links">
+    <button id="leaderboardBack" class="link-btn">← Back</button>
+    <span></span>
+  </div>
+  <div class="history-card">
+    <div class="history-title">🏆 Leaderboard</div>
+    <div id="leaderboardList"></div>
+  </div>
+</div>
+
 <div class="citation-footer">Benvenuto, J. (2024). Harmonies [Board game]. Libellud.</div>
 
 </div><!-- /.page-inner -->
@@ -647,7 +675,7 @@
 <div class="footer-bar" id="footerBar">
   <button id="addPlayer">+ Add player</button>
   <button id="saveGame" class="btn-primary">Save this game</button>
-  <button id="resetAll">Reset all</button>
+  <button id="newGame">New game</button>
 </div>
 
 <script>
@@ -929,8 +957,8 @@ document.getElementById("addPlayer").addEventListener("click", () => {
   render();
 });
 
-document.getElementById("resetAll").addEventListener("click", () => {
-  if (confirm("Reset all players and scores?")){
+document.getElementById("newGame").addEventListener("click", () => {
+  if (confirm("Start a new game? This clears the current scores.")){
     players = [newPlayer("Player 1"), newPlayer("Player 2")];
     nextId = 3;
     render();
@@ -1147,6 +1175,57 @@ async function renderHistory(key){
 }
 
 document.getElementById("historyBack").addEventListener("click", () => showView("landing"));
+
+// ---- Leaderboard ----
+
+let leaderboardRequestId = 0;
+
+async function renderLeaderboard(){
+  const requestId = ++leaderboardRequestId;
+  const list = document.getElementById("leaderboardList");
+  list.innerHTML = '<div class="history-empty">Loading…</div>';
+
+  let data;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    let res;
+    try {
+      res = await fetch("/api/leaderboard", { signal: controller.signal });
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (!res.ok) throw new Error("bad_status");
+    data = await res.json();
+  } catch (err) {
+    if (requestId !== leaderboardRequestId) return;
+    list.innerHTML = '<div class="history-empty">Couldn\'t load leaderboard. <button class="link-btn" id="retryLeaderboard">Retry</button></div>';
+    const retry = document.getElementById("retryLeaderboard");
+    if (retry) retry.addEventListener("click", renderLeaderboard);
+    return;
+  }
+
+  if (requestId !== leaderboardRequestId) return;
+
+  const rows = data.leaderboard || [];
+  list.innerHTML = rows.map((p, i) => `
+    <div class="history-row${i < 3 ? " top-3" : ""}">
+      <span class="rank">#${i + 1}</span>
+      <span class="name">${escapeAttr(p.displayName)}</span>
+      <span>${p.highScore}</span>
+    </div>
+  `).join("") || '<div class="history-empty">No games saved yet.</div>';
+}
+
+document.getElementById("landingLeaderboard").addEventListener("click", () => {
+  showView("leaderboard");
+  renderLeaderboard();
+});
+document.getElementById("scorerLeaderboard").addEventListener("click", () => {
+  showView("leaderboard");
+  renderLeaderboard();
+});
+document.getElementById("leaderboardBack").addEventListener("click", () => showView("landing"));
 
 // ---- Boot ----
 

@@ -520,7 +520,9 @@
   .game-tile-art img{
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    /* cover, not contain: the Faraway art is 4:3.5 and letterboxed inside the
+       4:3 frame otherwise. The Harmonies crop is exactly 4:3, so it's unaffected. */
+    object-fit: cover;
   }
   .game-tile-logo{
     width: min(60%, 180px);

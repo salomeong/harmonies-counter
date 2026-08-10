@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Board Game Score Counter</title>
+<title>The Faithful Tally</title>
 <link rel="icon" href="assets/logo.png">
 <style>
   :root{
@@ -133,6 +133,13 @@
     font-size: 1.4rem;
     margin: 4px 0 2px;
     text-align: center;
+  }
+  .site-name{
+    text-align: center;
+    font-size: 1.5rem;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    margin: 4px 0 2px;
   }
   .subtitle{
     text-align: center;
@@ -680,10 +687,11 @@
 </div>
 
 <div class="view active" id="view-picker">
+  <div class="site-name">The Faithful Tally</div>
   <div class="subtitle">Which game are we tallying?</div>
   <div class="picker-grid">
     <button class="game-tile" data-game="harmonies">
-      <div class="game-tile-art"><img src="assets/animal-fennec.png" alt=""></div>
+      <div class="game-tile-art"><img src="assets/harmonies-tile-art.jpg" alt=""></div>
       <img class="game-tile-logo" src="assets/logo.png" alt="Harmonies">
       <span class="game-tile-tagline">Build landscapes, settle animals</span>
     </button>

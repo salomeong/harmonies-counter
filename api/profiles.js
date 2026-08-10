@@ -1,8 +1,14 @@
-import { getSql } from '../lib/db.mjs';
+import { getSql, normalizeGame } from '../lib/db.mjs';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     res.status(405).json({ error: 'method_not_allowed' });
+    return;
+  }
+
+  const game = normalizeGame(req.query.game);
+  if (!game) {
+    res.status(400).json({ error: 'invalid_game' });
     return;
   }
 
@@ -13,6 +19,7 @@ export default async function handler(req, res) {
              p.high_score AS "highScore", MAX(g.played_at) AS "lastPlayed"
       FROM profiles p
       JOIN games g ON g.profile_id = p.id
+      WHERE p.game = ${game}
       GROUP BY p.id
       ORDER BY MAX(g.played_at) DESC
     `;

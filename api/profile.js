@@ -1,4 +1,4 @@
-import { getSql, normalizeName } from '../lib/db.mjs';
+import { getSql, normalizeName, normalizeGame } from '../lib/db.mjs';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -12,11 +12,17 @@ export default async function handler(req, res) {
     return;
   }
 
+  const game = normalizeGame(req.query.game);
+  if (!game) {
+    res.status(400).json({ error: 'invalid_game' });
+    return;
+  }
+
   try {
     const sql = getSql();
     const profiles = await sql`
       SELECT id, display_name AS "displayName", high_score AS "highScore"
-      FROM profiles WHERE name_key = ${key}
+      FROM profiles WHERE name_key = ${key} AND game = ${game}
     `;
     const profile = profiles[0];
     if (!profile) {

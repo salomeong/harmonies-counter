@@ -1,8 +1,14 @@
-import { getSql, normalizeName, isDefaultName } from '../lib/db.mjs';
+import { getSql, normalizeName, isDefaultName, normalizeGame } from '../lib/db.mjs';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'method_not_allowed' });
+    return;
+  }
+
+  const game = normalizeGame(req.body?.game);
+  if (!game) {
+    res.status(400).json({ error: 'invalid_game' });
     return;
   }
 
@@ -35,7 +41,7 @@ export default async function handler(req, res) {
       const key = normalizeName(trimmed);
       const existingRows = await sql`
         SELECT id, display_name AS "displayName", high_score AS "highScore"
-        FROM profiles WHERE name_key = ${key}
+        FROM profiles WHERE name_key = ${key} AND game = ${game}
       `;
       const existing = existingRows[0];
       const hadPriorGame = !!existing;
@@ -47,8 +53,8 @@ export default async function handler(req, res) {
         profileId = existing.id;
       } else {
         const inserted = await sql`
-          INSERT INTO profiles (name_key, display_name, high_score)
-          VALUES (${key}, ${trimmed}, 0)
+          INSERT INTO profiles (name_key, display_name, high_score, game)
+          VALUES (${key}, ${trimmed}, 0, ${game})
           RETURNING id
         `;
         profileId = inserted[0].id;

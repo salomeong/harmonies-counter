@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Harmonies Score Counter</title>
+<title>Board Game Score Counter</title>
 <link rel="icon" href="assets/logo.png">
 <style>
   :root{
@@ -114,6 +114,7 @@
     justify-content: center;
     margin-bottom: 2px;
   }
+  .logo-wrap.hidden{ display: none; }
   .logo-wrap img{
     width: min(70vw, 300px);
     height: auto;
@@ -121,6 +122,12 @@
   }
   @media (prefers-color-scheme: dark){
     .logo-wrap img{ filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4)) brightness(1.15); }
+  }
+  :root[data-theme="dark"] .logo-wrap img{
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4)) brightness(1.15);
+  }
+  :root[data-theme="light"] .logo-wrap img{
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));
   }
   h1{
     font-size: 1.4rem;
@@ -377,19 +384,19 @@
     font-weight: 700;
     cursor: pointer;
   }
-  #addPlayer{
+  #addPlayer, #addPlayerFa{
     background: var(--green-dark);
     color: white;
   }
-  #saveGame{
+  #saveGame, #saveGameFa{
     background: var(--accent);
     color: white;
   }
-  #saveGame:disabled{
+  #saveGame:disabled, #saveGameFa:disabled{
     opacity: 0.6;
     cursor: default;
   }
-  #newGame{
+  #newGame, #newGameFa{
     background: transparent;
     color: var(--muted);
     border: 1px solid var(--line) !important;
@@ -397,6 +404,9 @@
   .crown{
     font-size: 0.9rem;
     margin-left: 4px;
+  }
+  .player-card.fa::before{
+    background: linear-gradient(90deg, #6b3fa0, #e0871f);
   }
 
   .view{ display: none; }
@@ -461,6 +471,65 @@
     opacity: 0.5;
     cursor: default;
   }
+
+  .picker-grid{
+    max-width: 640px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  @media (max-width: 480px){
+    .picker-grid{ grid-template-columns: 1fr; }
+  }
+  .game-tile{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: var(--card);
+    border: 2px solid var(--line);
+    border-radius: 16px;
+    padding: 14px;
+    cursor: pointer;
+    box-shadow: 0 2px 10px rgba(60,45,20,0.06);
+    transition: transform 0.1s ease, border-color 0.15s ease;
+    font-family: inherit;
+  }
+  .game-tile:hover{
+    transform: translateY(-2px);
+    border-color: var(--accent);
+  }
+  .game-tile-art{
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    border-radius: 10px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg);
+  }
+  .game-tile-art img{
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .game-tile-logo{
+    width: min(60%, 180px);
+    height: auto;
+    margin-top: 2px;
+    background: #fbf6e9;
+    border-radius: 8px;
+    padding: 6px 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+  .game-tile-tagline{
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-align: center;
+  }
+
   .chip-row{
     display: flex;
     flex-wrap: wrap;
@@ -606,11 +675,27 @@
 
 <div class="page-inner">
 
-<div class="logo-wrap">
-  <img src="assets/logo.png" alt="Harmonies">
+<div class="logo-wrap" id="logoWrap">
+  <img id="masthead" src="assets/logo.png" alt="Harmonies">
 </div>
 
-<div class="view active" id="view-landing">
+<div class="view active" id="view-picker">
+  <div class="subtitle">Which game are we tallying?</div>
+  <div class="picker-grid">
+    <button class="game-tile" data-game="harmonies">
+      <div class="game-tile-art"><img src="assets/animal-fennec.png" alt=""></div>
+      <img class="game-tile-logo" src="assets/logo.png" alt="Harmonies">
+      <span class="game-tile-tagline">Build landscapes, settle animals</span>
+    </button>
+    <button class="game-tile" data-game="faraway">
+      <div class="game-tile-art"><img src="assets/faraway-tile-art.jpg" alt=""></div>
+      <img class="game-tile-logo" src="assets/faraway-logo.png" alt="Faraway">
+      <span class="game-tile-tagline">Journey home, reveal your fame</span>
+    </button>
+  </div>
+</div>
+
+<div class="view" id="view-landing">
   <div class="subtitle">Who's tallying tonight?</div>
   <div class="landing-card">
     <div class="landing-row">
@@ -621,6 +706,7 @@
     <div class="landing-hint">
       <button id="landingSkip" class="link-btn">Just tally a game →</button>
       <button id="landingLeaderboard" class="link-btn">🏆 Leaderboard</button>
+      <button id="switchGame" class="link-btn">🎲 Switch game</button>
     </div>
   </div>
 </div>
@@ -643,6 +729,18 @@
   <div id="saveBanner" class="save-banner"></div>
 
   <div class="players" id="players"></div>
+</div>
+
+<div class="view" id="view-scorer-faraway">
+  <div class="top-links">
+    <button id="switchPlayerFa" class="link-btn">🏠 Switch player</button>
+    <button id="scorerLeaderboardFa" class="link-btn">🏆 Leaderboard</button>
+  </div>
+  <div class="subtitle">Reveal your cards right to left, add up the fame</div>
+
+  <div id="saveBannerFa" class="save-banner"></div>
+
+  <div class="players" id="faPlayers"></div>
 </div>
 
 <div class="view" id="view-history">
@@ -668,7 +766,10 @@
   </div>
 </div>
 
-<div class="citation-footer">Benvenuto, J. (2024). Harmonies [Board game]. Libellud.</div>
+<div class="citation-footer">
+  Benvenuto, J. (2024). Harmonies [Board game]. Libellud.<br>
+  Goupy, J., &amp; Lebrat, C. (2023). Faraway [Board game]. Catch Up Games.
+</div>
 
 </div><!-- /.page-inner -->
 
@@ -678,9 +779,16 @@
   <button id="newGame">New game</button>
 </div>
 
+<div class="footer-bar" id="footerBarFaraway">
+  <button id="addPlayerFa">+ Add player</button>
+  <button id="saveGameFa" class="btn-primary">Save this game</button>
+  <button id="newGameFa">New game</button>
+</div>
+
 <script>
 const STACK_PTS = { h1: 1, h2: 3, h3: 7 };
 
+let activeGame = null;
 let waterSide = "river";
 let players = [];
 let nextId = 1;
@@ -966,11 +1074,196 @@ document.getElementById("newGame").addEventListener("click", () => {
   }
 });
 
+// ---- Faraway scorer ----
+// Faraway has no formula-based categories like Harmonies — each card's fame is printed on the
+// card itself and only counts if its prerequisite is met (checked by eye). The physical score pad
+// separates Region-card fame from Sanctuary-card fame before summing, so this mirrors that as two
+// repeatable number-input lists per player (same pattern as Harmonies' "Animal cards").
+
+let faPlayers = [];
+let faNextId = 1;
+
+function newFaPlayer(name){
+  return {
+    id: faNextId++,
+    name: name || "Player " + faNextId,
+    regionFame: [0],
+    sanctuaryFame: [0]
+  };
+}
+
+function faTotal(p){
+  return p.regionFame.reduce((sum, v) => sum + numOf(v), 0)
+    + p.sanctuaryFame.reduce((sum, v) => sum + numOf(v), 0);
+}
+
+function faFameList(playerId, role, values){
+  return values.map((v, i) => `
+    <div class="animal-row">
+      <input type="number" min="0" value="${v}" data-role="${role}" data-index="${i}" data-uid="fa-p${playerId}-${role}-${i}" />
+      <span class="cat-hint" style="margin:0;">fame from this card</span>
+      ${values.length > 1 ? `<button data-role="remove-${role}" data-index="${i}">✕</button>` : ''}
+    </div>
+  `).join("");
+}
+
+function renderFaraway(){
+  const active = document.activeElement;
+  let focusUid = null, selStart = null, selEnd = null;
+  if (active && active.dataset && active.dataset.uid){
+    focusUid = active.dataset.uid;
+    if (typeof active.selectionStart === "number"){
+      selStart = active.selectionStart;
+      selEnd = active.selectionEnd;
+    }
+  }
+
+  const container = document.getElementById("faPlayers");
+  container.innerHTML = "";
+
+  const totals = faPlayers.map(faTotal);
+  const maxTotal = totals.length ? Math.max(...totals) : -1;
+  const winners = totals.filter(t => t === maxTotal && maxTotal > 0).length;
+
+  faPlayers.forEach((p, idx) => {
+    const total = totals[idx];
+    const isWinner = total === maxTotal && maxTotal > 0 && faPlayers.length > 1;
+    const regionTotal = p.regionFame.reduce((s, v) => s + numOf(v), 0);
+    const sanctuaryTotal = p.sanctuaryFame.reduce((s, v) => s + numOf(v), 0);
+
+    const card = document.createElement("div");
+    card.className = "player-card fa" + (isWinner ? " winner" : "");
+
+    card.innerHTML = `
+      <div class="player-header">
+        <input type="text" value="${escapeAttr(p.name)}" data-role="fa-name" data-uid="fa-p${p.id}-name" />
+        ${isWinner && winners === 1 ? '<span class="crown">👑</span>' : ''}
+        <span class="total-badge">${total}</span>
+        ${faPlayers.length > 1 ? '<button class="remove-player" data-role="fa-remove">✕</button>' : ''}
+      </div>
+
+      <div class="category">
+        <div class="cat-label">🗺️ Region cards</div>
+        <div class="cat-pts">${regionTotal}</div>
+        <div class="animal-list">
+          ${faFameList(p.id, "region", p.regionFame)}
+          <button class="add-btn" data-role="fa-addRegion">+ Add card</button>
+        </div>
+        <div class="cat-hint">Reveal right to left; enter each card's fame if its prerequisite is met</div>
+      </div>
+
+      <div class="category">
+        <div class="cat-label">⛩️ Sanctuaries</div>
+        <div class="cat-pts">${sanctuaryTotal}</div>
+        <div class="animal-list">
+          ${faFameList(p.id, "sanctuary", p.sanctuaryFame)}
+          <button class="add-btn" data-role="fa-addSanctuary">+ Add card</button>
+        </div>
+        <div class="cat-hint">Scored after all Region cards, same way</div>
+      </div>
+    `;
+
+    container.appendChild(card);
+    wireFaCard(card, p);
+  });
+
+  if (focusUid){
+    const el = container.querySelector(`[data-uid="${focusUid}"]`);
+    if (el){
+      el.focus();
+      if (selStart !== null && el.setSelectionRange){
+        try { el.setSelectionRange(selStart, selEnd); } catch (e) {}
+      }
+    }
+  }
+}
+
+function wireFaCard(card, p){
+  card.querySelector('[data-role="fa-name"]').addEventListener("input", e => {
+    p.name = e.target.value;
+  });
+
+  const removeBtn = card.querySelector('[data-role="fa-remove"]');
+  if (removeBtn){
+    removeBtn.addEventListener("click", () => {
+      faPlayers = faPlayers.filter(pl => pl.id !== p.id);
+      renderFaraway();
+    });
+  }
+
+  [["region", "regionFame"], ["sanctuary", "sanctuaryFame"]].forEach(([role, field]) => {
+    card.querySelectorAll(`[data-role="${role}"]`).forEach(input => {
+      input.addEventListener("input", e => {
+        const i = Number(e.target.dataset.index);
+        p[field][i] = e.target.value;
+        renderFaraway();
+      });
+    });
+    card.querySelectorAll(`[data-role="remove-${role}"]`).forEach(btn => {
+      btn.addEventListener("click", e => {
+        const i = Number(e.target.dataset.index);
+        p[field].splice(i, 1);
+        renderFaraway();
+      });
+    });
+  });
+
+  const addRegionBtn = card.querySelector('[data-role="fa-addRegion"]');
+  if (addRegionBtn){
+    addRegionBtn.addEventListener("click", () => {
+      p.regionFame.push(0);
+      renderFaraway();
+    });
+  }
+  const addSanctuaryBtn = card.querySelector('[data-role="fa-addSanctuary"]');
+  if (addSanctuaryBtn){
+    addSanctuaryBtn.addEventListener("click", () => {
+      p.sanctuaryFame.push(0);
+      renderFaraway();
+    });
+  }
+}
+
+document.getElementById("addPlayerFa").addEventListener("click", () => {
+  faPlayers.push(newFaPlayer());
+  renderFaraway();
+});
+
+document.getElementById("newGameFa").addEventListener("click", () => {
+  if (confirm("Start a new game? This clears the current scores.")){
+    faPlayers = [newFaPlayer("Player 1"), newFaPlayer("Player 2")];
+    faNextId = 3;
+    renderFaraway();
+    hideSaveBanner("saveBannerFa");
+  }
+});
+
 // ---- Views ----
 
 function showView(name){
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + name));
   document.getElementById("footerBar").style.display = name === "scorer" ? "flex" : "none";
+  document.getElementById("footerBarFaraway").style.display = name === "scorer-faraway" ? "flex" : "none";
+
+  const logoWrap = document.getElementById("logoWrap");
+  const masthead = document.getElementById("masthead");
+  const showHarmoniesCritters = name !== "picker" && activeGame !== "faraway";
+  document.querySelectorAll(".corner-critter").forEach(el => {
+    el.style.display = showHarmoniesCritters ? "" : "none";
+  });
+  if (name === "picker"){
+    logoWrap.classList.add("hidden");
+  } else {
+    logoWrap.classList.remove("hidden");
+    if (activeGame === "faraway"){
+      masthead.src = "assets/faraway-logo.png";
+      masthead.alt = "Faraway";
+    } else {
+      masthead.src = "assets/logo.png";
+      masthead.alt = "Harmonies";
+    }
+  }
+
   if (name === "landing") renderLandingChips();
 }
 
@@ -978,6 +1271,18 @@ function formatDate(iso){
   const d = new Date(iso);
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
+
+// ---- Game picker ----
+
+document.querySelectorAll(".game-tile").forEach(tile => {
+  tile.addEventListener("click", () => {
+    activeGame = tile.dataset.game;
+    landingNameInput.value = "";
+    landingContinueBtn.disabled = true;
+    showView("landing");
+  });
+});
+document.getElementById("switchGame").addEventListener("click", () => showView("picker"));
 
 // ---- Landing ----
 
@@ -987,7 +1292,7 @@ async function fetchProfiles(){
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const res = await fetch("/api/profiles", { signal: controller.signal });
+    const res = await fetch("/api/profiles?game=" + encodeURIComponent(activeGame), { signal: controller.signal });
     if (!res.ok) throw new Error("bad_status");
     const data = await res.json();
     return data.profiles || [];
@@ -1036,9 +1341,15 @@ async function renderLandingChips(){
 }
 
 function startScorerWithName(name){
-  players[0].name = name;
-  render();
-  showView("scorer");
+  if (activeGame === "faraway"){
+    faPlayers[0].name = name;
+    renderFaraway();
+    showView("scorer-faraway");
+  } else {
+    players[0].name = name;
+    render();
+    showView("scorer");
+  }
 }
 
 const landingNameInput = document.getElementById("landingName");
@@ -1056,31 +1367,30 @@ landingContinueBtn.addEventListener("click", () => {
   const name = landingNameInput.value.trim();
   if (name) startScorerWithName(name);
 });
-document.getElementById("landingSkip").addEventListener("click", () => showView("scorer"));
+document.getElementById("landingSkip").addEventListener("click", () => {
+  showView(activeGame === "faraway" ? "scorer-faraway" : "scorer");
+});
 document.getElementById("switchPlayer").addEventListener("click", () => showView("landing"));
+document.getElementById("switchPlayerFa").addEventListener("click", () => showView("landing"));
 
 // ---- Save this game ----
 
-function hideSaveBanner(){
-  const el = document.getElementById("saveBanner");
+function hideSaveBanner(bannerId = "saveBanner"){
+  const el = document.getElementById(bannerId);
   el.className = "save-banner";
   el.innerHTML = "";
 }
 
-function renderSaveBanner(kind, html){
-  const el = document.getElementById("saveBanner");
+function renderSaveBanner(kind, html, bannerId = "saveBanner"){
+  const el = document.getElementById(bannerId);
   el.className = "save-banner visible " + kind;
   el.innerHTML = html;
 }
 
-async function saveGame(){
-  const btn = document.getElementById("saveGame");
+async function submitGame(game, buildPlayers, btnId, bannerId, retryFn){
+  const btn = document.getElementById(btnId);
   btn.disabled = true;
   btn.textContent = "Saving…";
-
-  const payload = {
-    players: players.map(p => ({ name: p.name, total: totalPoints(p) }))
-  };
 
   try {
     const controller = new AbortController();
@@ -1090,7 +1400,7 @@ async function saveGame(){
       res = await fetch("/api/save-game", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ game, players: buildPlayers() }),
         signal: controller.signal
       });
     } finally {
@@ -1103,23 +1413,40 @@ async function saveGame(){
       const lines = data.celebrations.map(c =>
         `🎉 New high score for ${escapeAttr(c.displayName)} — ${c.total} (previous best ${c.previousHigh})!`
       ).join("<br>");
-      renderSaveBanner("celebrate", lines);
+      renderSaveBanner("celebrate", lines, bannerId);
     } else if (data.saved && data.saved.length){
-      renderSaveBanner("info", `Saved ${data.saved.length} player${data.saved.length === 1 ? "" : "s"}' game${data.saved.length === 1 ? "" : "s"}.`);
+      renderSaveBanner("info", `Saved ${data.saved.length} player${data.saved.length === 1 ? "" : "s"}' game${data.saved.length === 1 ? "" : "s"}.`, bannerId);
     } else {
-      renderSaveBanner("info", "No named players to save — give someone a real name first.");
+      renderSaveBanner("info", "No named players to save — give someone a real name first.", bannerId);
     }
   } catch (err) {
-    renderSaveBanner("error", `Couldn't save — check your connection and try again. <button class="retry-btn" id="retrySave">Retry</button>`);
-    const retry = document.getElementById("retrySave");
-    if (retry) retry.addEventListener("click", saveGame);
+    renderSaveBanner("error", `Couldn't save — check your connection and try again. <button class="retry-btn" id="retrySave-${btnId}">Retry</button>`, bannerId);
+    const retry = document.getElementById(`retrySave-${btnId}`);
+    if (retry) retry.addEventListener("click", retryFn);
   } finally {
     btn.disabled = false;
     btn.textContent = "Save this game";
   }
 }
 
+function saveGame(){
+  return submitGame(
+    "harmonies",
+    () => players.map(p => ({ name: p.name, total: totalPoints(p) })),
+    "saveGame", "saveBanner", saveGame
+  );
+}
+
+function saveFaraway(){
+  return submitGame(
+    "faraway",
+    () => faPlayers.map(p => ({ name: p.name, total: faTotal(p) })),
+    "saveGameFa", "saveBannerFa", saveFaraway
+  );
+}
+
 document.getElementById("saveGame").addEventListener("click", saveGame);
+document.getElementById("saveGameFa").addEventListener("click", saveFaraway);
 
 // ---- History ----
 
@@ -1144,7 +1471,7 @@ async function renderHistory(key){
     const timeout = setTimeout(() => controller.abort(), 10000);
     let res;
     try {
-      res = await fetch("/api/profile?name=" + encodeURIComponent(key), { signal: controller.signal });
+      res = await fetch("/api/profile?name=" + encodeURIComponent(key) + "&game=" + encodeURIComponent(activeGame), { signal: controller.signal });
     } finally {
       clearTimeout(timeout);
     }
@@ -1191,7 +1518,7 @@ async function renderLeaderboard(){
     const timeout = setTimeout(() => controller.abort(), 10000);
     let res;
     try {
-      res = await fetch("/api/leaderboard", { signal: controller.signal });
+      res = await fetch("/api/leaderboard?game=" + encodeURIComponent(activeGame), { signal: controller.signal });
     } finally {
       clearTimeout(timeout);
     }
@@ -1225,13 +1552,19 @@ document.getElementById("scorerLeaderboard").addEventListener("click", () => {
   showView("leaderboard");
   renderLeaderboard();
 });
+document.getElementById("scorerLeaderboardFa").addEventListener("click", () => {
+  showView("leaderboard");
+  renderLeaderboard();
+});
 document.getElementById("leaderboardBack").addEventListener("click", () => showView("landing"));
 
 // ---- Boot ----
 
 players = [newPlayer("Player 1"), newPlayer("Player 2")];
 render();
-showView("landing");
+faPlayers = [newFaPlayer("Player 1"), newFaPlayer("Player 2")];
+renderFaraway();
+showView("picker");
 </script>
 </body>
 </html>

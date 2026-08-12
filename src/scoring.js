@@ -97,6 +97,20 @@ export function makeScorer(game, getVariant){
       return api.breakdown(p).total;
     },
 
+    // Raw entered state for the saved ledger's `detail` JSON — one key per category that declares
+    // a `detail(p)` on its descriptor (see src/games/harmonies.js's header comment for the
+    // contract). Deliberately NOT derived points: "science: 21" can't reconstruct "3 tablets, 2
+    // compasses, 1 gear", so this calls each category's own `detail`, not `catPoints`/`derived`.
+    // A category with no `detail` (there are none today, but the contract allows it) is simply
+    // absent from the object rather than defaulting to some placeholder value.
+    detail(p){
+      const out = {};
+      for (const c of game.cats){
+        if (c.detail) out[c.key] = c.detail(p);
+      }
+      return out;
+    },
+
     newPlayer(id, name){
       // `id` is read before it is consumed by the caller's counter — naming off the post-increment
       // value is what used to label the third player "Player 4".

@@ -4,6 +4,8 @@ import {
   STACK_PTS, numOf, stackPoints, riverPoints, animalPoints, isTotalMode, makeScorer
 } from './scoring.js';
 import { harmonies } from './games/harmonies.js';
+import { faraway } from './games/faraway.js';
+import { sevenwonders } from './games/sevenwonders.js';
 
 // A scorer bound to a fixed variant getter, for tests that don't care about switching sides
 // mid-test.
@@ -371,4 +373,101 @@ test('infer: the default min (0) still floors a negative typed total at 0, same 
   const p = { fields: 2 };
   assert.equal(scorerFor(undefined).infer(p, 'fields', '-10'), true);
   assert.equal(p.fields, 0, 'a negative total is clamped to the default min (0), same behaviour as the old hardcoded floor');
+});
+
+// ---- scorer.detail — raw entered state for the saved ledger, NEVER derived points ----
+
+test('detail: harmonies — one key per category, holding the raw entered fields, not points', () => {
+  const p = {
+    totals: {},
+    trees: { h1: 1, h2: 0, h3: 0 },      // 1 point, but detail must record the stack, not "1"
+    mountains: { h1: 0, h2: 1, h3: 0 },
+    fields: 2,
+    buildings: 3,
+    river: 4,
+    islands: 2,
+    animals: [1, 2],
+    bonus: 5
+  };
+  const d = scorerFor({ waterSide: 'river' }).detail(p);
+  assert.deepEqual(d, {
+    trees: { h1: 1, h2: 0, h3: 0 },
+    mountains: { h1: 0, h2: 1, h3: 0 },
+    fields: 2,
+    buildings: 3,
+    water: { river: 4, islands: 2 },
+    animals: [1, 2],
+    bonus: 5
+  });
+});
+
+test('detail: harmonies — water reports both river and islands regardless of the active side', () => {
+  const p = {
+    trees: { h1: 0, h2: 0, h3: 0 }, mountains: { h1: 0, h2: 0, h3: 0 },
+    fields: 0, buildings: 0, river: 6, islands: 3, animals: [0], bonus: 0
+  };
+  assert.deepEqual(scorerFor({ waterSide: 'island' }).detail(p).water, { river: 6, islands: 3 });
+  assert.deepEqual(scorerFor({ waterSide: 'river' }).detail(p).water, { river: 6, islands: 3 });
+});
+
+test('detail: harmonies — a typed-total override does not change what detail() reports (raw state, not derived points)', () => {
+  const p = {
+    totals: { trees: 99 },              // overridden to 99 points
+    trees: { h1: 1, h2: 0, h3: 0 },      // raw entered state is still just this
+    mountains: { h1: 0, h2: 0, h3: 0 },
+    fields: 0, buildings: 0, river: 0, islands: 1, animals: [0], bonus: 0
+  };
+  const d = scorerFor({ waterSide: 'river' }).detail(p);
+  assert.deepEqual(d.trees, { h1: 1, h2: 0, h3: 0 }, 'detail must stay the raw stack, not the 99-point override');
+});
+
+test('detail: harmonies — string-typed raw values (fresh from <input>) are coerced numerically, mirroring points()', () => {
+  const p = {
+    trees: { h1: 0, h2: 0, h3: 0 }, mountains: { h1: 0, h2: 0, h3: 0 },
+    fields: 0, buildings: 0, river: 0, islands: 1,
+    animals: ['2', '3', ''], bonus: '7'
+  };
+  const d = scorerFor(undefined).detail(p);
+  assert.deepEqual(d.animals, [2, 3, 0]);
+  assert.equal(d.bonus, 7);
+});
+
+test('detail: faraway — region/sanctuary report their raw fame lists, coerced numerically', () => {
+  const p = { regionFame: [1, '2', 3], sanctuaryFame: ['5', 0] };
+  const scorer = makeScorer(faraway, () => undefined);
+  assert.deepEqual(scorer.detail(p), { region: [1, 2, 3], sanctuary: [5, 0] });
+});
+
+test('detail: 7 wonders — every category reports raw entered state, not derived points', () => {
+  const p = {
+    military: { w1: 1, w3: 0, w5: 0, loss: 2 }, // -1 net points, detail keeps the raw tallies
+    treasury: 8,                                 // 2 points (floor(8/3)), detail keeps 8
+    wonders: [3, 4],
+    civilian: [5],
+    science: { tablet: 2, compass: 1, gear: 0 },
+    commercial: [1, 1],
+    guilds: [0]
+  };
+  const scorer = makeScorer(sevenwonders, () => undefined);
+  const d = scorer.detail(p);
+  assert.deepEqual(d, {
+    military: { w1: 1, w3: 0, w5: 0, loss: 2 },
+    treasury: 8,
+    wonders: [3, 4],
+    civilian: [5],
+    science: { tablet: 2, compass: 1, gear: 0 },
+    commercial: [1, 1],
+    guilds: [0]
+  });
+});
+
+test('detail: every category key in a game descriptor that declares detail appears in scorer.detail()', () => {
+  for (const game of [harmonies, faraway, sevenwonders]){
+    const scorer = makeScorer(game, () => undefined);
+    const p = scorer.newPlayer(1, 'Test');
+    const d = scorer.detail(p);
+    for (const c of game.cats){
+      if (c.detail) assert.ok(Object.prototype.hasOwnProperty.call(d, c.key), `${game.key}: missing detail key "${c.key}"`);
+    }
+  }
 });

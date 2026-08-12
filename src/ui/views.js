@@ -2,7 +2,7 @@
 // picker, the landing screen (name entry + saved-player chips), history, leaderboard, and the
 // save-this-game flow. Moved out of index.html's inline script, unchanged in behaviour.
 
-import { S } from "../state.js";
+import { S, variant } from "../state.js";
 import { render } from "./scorer.js";
 import { GAME_LIST } from "../games/index.js";
 import { escapeAttr } from "./controls.js";
@@ -141,17 +141,26 @@ async function submitGame(gameKey, buildPlayers, btnId, bannerId, retryFn){
   btn.textContent = "Saving…";
 
   try {
-    const data = await postGame({ game: gameKey, players: buildPlayers() });
+    const data = await postGame({
+      game: gameKey,
+      endedBy: "score",
+      variant: variant(),
+      players: buildPlayers()
+    });
 
     if (data.celebrations && data.celebrations.length){
       const lines = data.celebrations.map(c =>
         `🎉 New high score for ${escapeAttr(c.displayName)} — ${c.total} (previous best ${c.previousHigh})!`
       ).join("<br>");
       renderSaveBanner("celebrate", lines, bannerId);
-    } else if (data.saved && data.saved.length){
-      renderSaveBanner("info", `Saved ${data.saved.length} player${data.saved.length === 1 ? "" : "s"}' game${data.saved.length === 1 ? "" : "s"}.`, bannerId);
     } else {
-      renderSaveBanner("info", "No named players to save — give someone a real name first.", bannerId);
+      // Every seat is saved now, guests included, so `saved` is never empty — the old
+      // "no named players to save" branch became unreachable when the ledger started recording
+      // whole sessions rather than only the players it could attach to a profile.
+      // TODO(ui): guests still don't appear on the leaderboard, and nothing says so. Worth a nudge
+      // to name them — that's copy, so it goes through the frontend-design skill.
+      const n = data.saved.length;
+      renderSaveBanner("info", `Saved ${n} player${n === 1 ? "" : "s"}' game${n === 1 ? "" : "s"}.`, bannerId);
     }
   } catch (err) {
     renderSaveBanner("error", `Couldn't save — check your connection and try again. <button class="retry-btn" id="retrySave-${btnId}">Retry</button>`, bannerId);
@@ -163,10 +172,18 @@ async function submitGame(gameKey, buildPlayers, btnId, bannerId, retryFn){
   }
 }
 
+// Every player is sent — guests (unnamed/default-named) included. The server, not the client,
+// decides who gets a `people` row (see api/save-game.js); the ledger needs a row per seat
+// regardless, or the session misrepresents who was at the table.
 export function saveGame(){
   return submitGame(
     S.activeGame,
-    () => S.players.map(p => ({ name: p.name, total: S.scorer.total(p) })),
+    () => S.players.map((p, i) => ({
+      name: p.name,
+      seat: i,
+      total: S.scorer.total(p),
+      detail: S.scorer.detail(p)
+    })),
     "saveGame", "saveBanner", saveGame
   );
 }

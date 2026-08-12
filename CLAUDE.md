@@ -81,38 +81,12 @@ say so; never regenerate it to make a red check go green.
 
 ### The ledger (`schema.sql`, `api/*`)
 
-A saved game is a **session**, not a row per player. `sessions` + `session_players` (+ `people`,
-+ `session_photos`) replaced the old `profiles`/`games` pair, where two people at the same table
-produced two unrelated rows — no opponents, no per-category detail, no URL. `api/session.js`
-returns one by its `public_id`, which is what lets a leaderboard link back to the game that earned
-a score.
+A saved game is a **session**, not a row per player — `sessions` + `session_players` (+ `people`,
+`session_photos`). `session_players.detail` holds the **raw entered state** from `scorer.detail(p)`,
+never derived points, and `total_score` is authoritative and never recomputed from it.
 
-The seam: **anything you rank, filter or aggregate across games is a real column; anything you only
-display inside its own game's context is `session_players.detail` JSONB.** `detail` holds the RAW
-entered state built by `scorer.detail(p)` — never derived points, because `{"science": 21}` can't
-reconstruct "3 tablets, 2 compasses, 1 gear", and a recap that wants to show what someone *built*
-would be blocked by data we captured but shaped badly.
-
-- **`total_score` is authoritative and never recomputed** from `detail`, so fixing a scoring rule
-  or adding an expansion can't retroactively rewrite what happened. `display_name` is snapshotted
-  per seat for the same reason.
-- **`high_score` is not stored anywhere** — it's `MAX(total_score)`, so it cannot drift.
-- **Every seat is recorded, guests included** (`person_id NULL`). A 4-player game must produce 4
-  rows or the session misrepresents who was at the table; only *named* players get a `people` row
-  and so appear in leaderboards and history.
-- `detail` keys are **permanent identifiers — add freely, never rename or repurpose**, or you
-  orphan every game already saved under the old key.
-- The write is atomic via `sql.transaction([...])`. The neon HTTP driver has no interactive
-  transactions, so the handler generates `public_id` up front and later statements resolve the
-  session by it rather than needing an id back mid-transaction.
-- `sessions.ended_by` supports Duel's supremacy endings, but **the API only accepts `'score'`** —
-  nothing in the payload says who won a game that ended with no scores counted, so accepting one
-  would write a session with no winner. Thread a `winnerSeat` through before enabling it.
-
-`scripts/init-db.mjs` applies `schema.sql`. It strips `--` comments before splitting on `;` —
-the naive split it used to do was broken by a comment that itself contained semicolons, which
-severed a `CREATE TABLE` mid-definition. `scripts/init-db.test.mjs` guards that; it is not
-a general migration tool, and a re-run will not add a column you added later.
+**Read [docs/ledger.md](docs/ledger.md) before touching `schema.sql`, `api/*`, or anything that
+writes a score.**
 
 ### Adding a game
 
@@ -151,7 +125,7 @@ accidentally left out of the `=` strip still reaches the badge instead of vanish
 test asserts `sums` partitions `cats` exactly once each.
 
 `variant` is `{ waterSide }` — passed in rather than read from a global, so descriptors stay pure
-and testable. `index.html` has `const variant = () => ({ waterSide })`.
+and testable. `src/state.js` exports `variant()`, which reads `S.waterSide`.
 
 **Never pass a scoring function as a bare callback.** `players.map(scorer.total)` hands `map`'s
 *index* in as the second argument. That already bit once as `players.map(totalPoints)`, where the
@@ -283,57 +257,10 @@ base `.toggle-group button` rule to win on specificity.
 
 ## Deploying
 
-**One project: `faithful-tally`.** `.vercel/project.json` links to it, and Vercel's own
-Production/Preview environments do the staging job.
+**One project, `faithful-tally`. `vercel deploy` publishes a preview; `vercel deploy --prod`
+publishes to real users.** That is the opposite of what this repo's history assumes — until
+2026-08-13 `--prod` was the safe everyday command, because it targeted a separate preview project.
 
-| Target | Command | URL |
-|---|---|---|
-| Preview | `vercel deploy --yes` | `faithful-tally-<hash>-maxxyhs-projects.vercel.app` (SSO-gated) |
-| **Production** | `vercel deploy --prod --yes` | https://faithful-tally.vercel.app — **this is what your friend sees** |
+**Read [docs/deploying.md](docs/deploying.md) before deploying or changing the schema** — it covers
+the environments, the shared Neon database, why `vercel env pull` returns empty values, and Git.
 
-> ⚠️ **`--prod` now publishes to real users.** Until 2026-08-13 this folder was linked to a second
-> project (`faithful-tally-preview`), so `vercel deploy --prod` was the *safe* everyday command and
-> is written that way all over this file's history. It isn't any more. **Plain `vercel deploy` is
-> the everyday command; `--prod` is a deliberate act.**
-
-Preview URLs contain the team slug, so they 302 to a Vercel login — fine for testing while signed
-in, but not a link you can hand to anyone. That is the one thing the retired second project gave
-us (its `harmonies-counter-gray.vercel.app` alias predated the team-slug rule and stayed public).
-If a shareable pre-release link is ever needed again, add a proper domain rather than resurrecting
-a duplicate project.
-
-**Preview and production currently share one Neon database.** That is fine while the app is
-unreleased and stops being fine the moment real games are saved. The fix is already offered by the
-Neon integration: *Create Database Branch For Deployment → Preview*, which gives each preview
-deployment its own branch of the data. Turn that on before the first real game, and a schema change
-can be rehearsed on a preview branch instead of being run straight at production.
-
-**Applying a schema change:** `node --env-file=.env.local scripts/init-db.mjs`, after
-`vercel env pull` (see the note below on why that needs the Development environment). Look before
-you overwrite — `scripts/inspect-db.mjs` prints the tables and row counts of whatever
-`DATABASE_URL` currently points at, which is the cheapest way to find out you are aimed at
-production.
-
-**`vercel env pull` returns Production/Preview values as empty strings.** Vercel marks them
-*sensitive* by default (hence `vercel env add --no-sensitive`, "opt out of the sensitive default on
-Production and Preview"), which makes them write-only — `env pull` yields `DATABASE_URL=""` rather
-than failing, so it looks like a CLI bug and isn't. To run anything locally against the real
-database (`scripts/init-db.mjs`), add the variable to the **Development** environment as well;
-Development vars are not sensitive and do pull. In the dashboard you can tick Development on the
-existing variable without re-entering the value.
-
-**A brand-new project's very first `vercel deploy` (no flags) is auto-promoted to production**
-regardless of the `--prod` flag being absent. This bit us once already, on the first-ever deploy of
-the now-retired preview project. Every deploy after the first behaves normally (defaults to
-preview, `--prod` promotes) — so this only matters if a fresh project is ever created.
-
-**The retired `faithful-tally-preview` project still exists** (2026-08-13) and still answers on
-`harmonies-counter-gray.vercel.app`, now serving a stale build. Delete it when you're confident
-nothing points at it; until then, don't be confused by a second live copy of the app.
-
-## Git
-
-Remote is `salomeong/harmonies-counter`. The local `maxxyh` identity **has push access** (granted
-2026-08-12; it was previously read-only and 403'd, which is why older notes said to commit locally
-only). Don't fork without asking. CI runs `node --test` and the scoring-fixture check on every push
-— see [.github/workflows/test.yml](.github/workflows/test.yml).

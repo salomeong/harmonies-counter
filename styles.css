@@ -156,6 +156,31 @@
     height: auto;
     filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));
   }
+  /* The masthead doubles as the way back to the game picker.
+     It is the logo rather than a third link in `.top-links` because at 320px those two links
+     already take 213 of 288px — even "🏠 Home" would leave about 8px between items, and a second
+     house emoji next to "🏠 Switch player" splits the metaphor. The logo costs no horizontal space
+     at all, and it is the most prominent element on the page while being otherwise inert. */
+  .masthead-home{
+    border: none;
+    background: none;
+    padding: 0;
+    display: block;
+    cursor: pointer;
+    border-radius: 10px;
+    /* the settle of a stamp being pressed, not a UI button bouncing */
+    transition: transform 0.12s ease, filter 0.12s ease;
+  }
+  .masthead-home:active{
+    transform: translateY(1px) scale(0.985);
+  }
+  @media (hover: hover){
+    .masthead-home:hover img{ filter: drop-shadow(0 3px 9px rgba(0,0,0,0.2)); }
+  }
+  .masthead-home:focus-visible{
+    outline: 2px solid var(--accent);
+    outline-offset: 6px;
+  }
   @media (prefers-color-scheme: dark){
     .logo-wrap img{ filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4)) brightness(1.15); }
   }

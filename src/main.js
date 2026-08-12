@@ -87,6 +87,11 @@ document.getElementById("pickerGrid").addEventListener("click", e => {
 });
 document.getElementById("switchGame").addEventListener("click", () => showView("picker"));
 
+// The masthead is the one-tap way home from inside a game — see .masthead-home in styles.css for
+// why it isn't a third link in the top bar. Per-game scores survive the trip (state lives in the
+// per-game map), so this is a navigation, not a reset.
+document.getElementById("mastheadHome").addEventListener("click", () => showView("picker"));
+
 // ---- Landing ----
 
 const landingNameInput = document.getElementById("landingName");

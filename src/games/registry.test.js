@@ -3,18 +3,21 @@ import assert from 'node:assert/strict';
 import { GAMES, GAME_LIST, getGame } from './index.js';
 import { harmonies } from './harmonies.js';
 import { faraway } from './faraway.js';
+import { sevenwonders } from './sevenwonders.js';
 
 // ---- Registry wiring ----
 
 test('GAMES and GAME_LIST reference the same game objects', () => {
   assert.equal(GAMES.harmonies, harmonies);
   assert.equal(GAMES.faraway, faraway);
-  assert.deepEqual(GAME_LIST, [harmonies, faraway]);
+  assert.equal(GAMES['7wonders'], sevenwonders);
+  assert.deepEqual(GAME_LIST, [harmonies, faraway, sevenwonders]);
 });
 
 test('getGame returns the game for a known key, and null for an unknown one', () => {
   assert.equal(getGame('harmonies'), harmonies);
   assert.equal(getGame('faraway'), faraway);
+  assert.equal(getGame('7wonders'), sevenwonders);
   assert.equal(getGame('nonexistent'), null);
   assert.equal(getGame(''), null);
   assert.equal(getGame(undefined), null);
@@ -62,4 +65,10 @@ test('harmonies declares all seven categories in the documented order', () => {
 test('faraway declares its two categories and no sums', () => {
   assert.deepEqual(faraway.cats.map(c => c.key), ['region', 'sanctuary']);
   assert.equal(faraway.sums, undefined);
+});
+
+test('sevenwonders declares all seven categories in the printed scorepad order, and no sums', () => {
+  assert.deepEqual(sevenwonders.cats.map(c => c.key),
+    ['military', 'treasury', 'wonders', 'civilian', 'science', 'commercial', 'guilds']);
+  assert.equal(sevenwonders.sums, undefined);
 });

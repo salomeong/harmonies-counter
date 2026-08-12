@@ -1,7 +1,7 @@
 # The Faithful Tally
 
-A board-game score counter for **Harmonies** and **Faraway**. Players tally an end-of-game board
-and the app derives the score, so nobody does mental arithmetic.
+A board-game score counter for **Harmonies**, **Faraway** and **7 Wonders**. Players tally an
+end-of-game board and the app derives the score, so nobody does mental arithmetic.
 
 ## Keep this file current
 
@@ -30,8 +30,10 @@ src/
     index.js        the GAMES registry
     harmonies.js    ← the category-descriptor contract is documented here
     faraway.js
+    sevenwonders.js
   ui/
     controls.js     pure HTML-string builders (token art, tally, ladders, lists)
+    art-7w.js       7 Wonders component art (cards, struck tokens, coins)
     card.js         pure HTML-string builders for the player card (categoryBlock, catBody,
                      playerCardBody, sumStrip) — see "Every rendered number needs a patch hook"
 index.html          <style> + <script type="module">: render/patch/wire and the views
@@ -107,11 +109,26 @@ plausible wrong number nobody re-checks.
 ### Every rendered number needs a patch hook
 
 Taps call `patchScores()`, not `render()`, so **any number in the markup that isn't wired to a
-`data-pts-for` / `data-sum` / `data-count-for` hook will silently freeze at its initial value.**
-This has already shipped once: Faraway's `.cat-pts` was rendered without `data-pts-for`, so its
-per-category scores sat at 0 while the total updated correctly. `src/ui/card.test.js` asserts every
-score-bearing element in every game's markup carries a hook — keep it passing rather than deleting
-the assertion.
+`data-pts-for` / `data-sum` / `data-count-for` / `data-work-for` hook will silently freeze at its
+initial value.** This has already shipped once: Faraway's `.cat-pts` was rendered without
+`data-pts-for`, so its per-category scores sat at 0 while the total updated correctly.
+`src/ui/card.test.js` asserts every score-bearing element in every game's markup carries a hook —
+keep it passing rather than deleting the assertion.
+
+The test does this two ways, and both are load-bearing. It renders each category twice (an
+all-zero player and a fully-populated one) and requires that **anything whose text differs between
+the two renders sits under a hook** — which automatically ignores static rule constants like the
+1/3/7 token pips, since those read the same in both. That check is blind to elements which ship a
+constant placeholder and are only ever filled by `patchScores()` (the `=` strip, the total badge),
+so those are asserted structurally instead.
+
+### Showing the working
+
+A category may define `work(p, variant) => html`, rendered under it inside `data-work-for` and
+rebuilt on every patch. This is where the app stops being a calculator and starts being
+trustworthy: 7 Wonders' science shows `3² 9 · 2² 4 · 1² 1` and then `1 set × 7`, so 21 is something
+you can check rather than something you have to believe. Treasury names the leftover coins that
+score nothing; military spells out the defeats, which is the half people forget to subtract.
 
 ### Three ways to enter a score
 
@@ -169,12 +186,30 @@ call `patchScores()` rather than `render()`.
 `.num-input`, `.total-badge`, `.crown`). Harmonies' accordion styles are scoped behind a `.acc`
 modifier specifically to protect it. **Check the Faraway view after any shared-class change.**
 
-**Token art is generated, not imported.** `tokenArt(kind, height)` draws all nine sprites from one
-`tokenDisc()` cylinder helper using the `--tok-*` vars. No image files, crisp at any DPI, themes
-correctly.
+**Token art is generated, not imported.** `tokenArt(kind, height)` draws all nine Harmonies sprites
+from one `tokenDisc()` cylinder helper using the `--tok-*` vars. No image files, crisp at any DPI,
+themes correctly. A descriptor's `art` may instead be a **function returning SVG**, which is how
+7 Wonders draws components that aren't discs (`src/ui/art-7w.js`: cards standing in the slot,
+struck tokens, coins). Only the picker tile and masthead logo are imported images.
 
-Scoring ladders are verified against the printed rule card: stacks `0/1/3/7`, river length 1–6 →
-`0/2/5/8/11/15` then `+4` each. Don't "fix" these.
+**Each game keeps the real component colours.** `--sw-*` are 7 Wonders' actual card colours at full
+saturation, because players say "the red card" and "the purple card" — muting them into the
+parchment palette would make the game harder to score, not more tasteful. `--sw-gold` (`#f0c000`) is
+sampled from the printed wordmark, not guessed.
+
+A game can restyle its own scorer via `#view-scorer[data-game="<key>"]` setting `--pip` / `--pip-ink`
+/ `--rung`; 7 Wonders takes gold pips with `--sw-ink` over them (9.2:1). **The grand total stays
+`--accent` in every game** so "the big orange blob is the final score" holds everywhere.
+
+Scoring ladders are verified against the printed rule card and **must not be "fixed"**:
+
+| Game | Ladders |
+|---|---|
+| Harmonies | stacks `0/1/3/7`; river length 1–6 → `0/2/5/8/11/15`, then `+4` each; fields/buildings/islands 5 each |
+| 7 Wonders | science `t² + c² + g² + 7 × min(t,c,g)`; military `+1/+3/+5` per age won, `−1` per defeat (range −6..+18); treasury `floor(coins / 3)` |
+
+7 Wonders' military is the only category that can score below zero — hence `min: -6` on its
+descriptor. Its counts still never go negative; you tally 3 defeats, and the descriptor multiplies.
 
 ## Running it
 

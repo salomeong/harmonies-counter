@@ -59,15 +59,34 @@ function openAllCats(p, game){
 
 // Splits on "<": everything after the first element is "<tagContent>trailingText...", which is
 // enough to pair a tag with the text immediately following it without a real parser.
+// A "show your working" block rebuilds its whole inner markup on every patch, so it legitimately
+// renders a DIFFERENT NUMBER of elements for different player states (science shows one "no
+// symbols yet" note when empty and three squares plus a set bonus when full). Positional pairing
+// can't survive that, so collapse each block to a marker before diffing. The invariant still
+// holds — everything inside sits under the [data-work-for] hook — and the structural test below
+// asserts that hook is actually present, which is the part that would otherwise go unchecked.
+function maskWorkBlocks(html){
+  // The mask stops at the FIRST </div>, which is only correct while no work() emits a nested
+  // <div>. If one ever does, this would silently swallow the rest of .cat-body — including
+  // .cat-actions — and quietly weaken the very check it exists to protect. Assert the assumption
+  // rather than leaving it as a latent trap.
+  for (const block of html.match(/<div class="cat-work"[\s\S]*?<\/div>/g) || []){
+    assert.ok(!/<div/.test(block.slice(5)),
+      'a work() block emitted a nested <div>; maskWorkBlocks() can no longer find its true end ' +
+      'and must be replaced with a balanced-tag mask before this check can be trusted');
+  }
+  return html.replace(/<div class="cat-work"[^>]*>[\s\S]*?<\/div>/g, '<div class="cat-work-masked"></div>');
+}
+
 function tagTextPairs(html){
-  return html.split('<').slice(1).map(chunk => {
+  return maskWorkBlocks(html).split('<').slice(1).map(chunk => {
     const gt = chunk.indexOf('>');
     if (gt === -1) return null;
     return { tag: chunk.slice(0, gt), text: chunk.slice(gt + 1) };
   }).filter(Boolean);
 }
 
-const HOOK_RE = /data-pts-for=|data-sum=|data-count-for=/;
+const HOOK_RE = /data-pts-for=|data-sum=|data-count-for=|data-work-for=/;
 
 for (const game of GAME_LIST){
   test(`${game.key}: every score-bearing element carries a patch hook (data-pts-for/data-sum/data-count-for)`, () => {
@@ -123,6 +142,15 @@ for (const game of GAME_LIST){
     if (game.sums){
       assert.match(html, /data-sum="total"/,
         `${game.key}: the "=" strip's grand total needs data-sum="total"`);
+    }
+
+    // Any category that explains its own arithmetic must wrap that explanation in the hook that
+    // rebuilds it, or the working silently describes a score the player no longer has — worse than
+    // showing nothing, because it looks authoritative.
+    for (const cat of game.cats){
+      if (!cat.work) continue;
+      assert.match(html, new RegExp(`data-work-for="${cat.key}"`),
+        `${game.key}: "${cat.key}" renders a working line, so it needs data-work-for="${cat.key}"`);
     }
   });
 }

@@ -41,6 +41,36 @@
 
     /* the cream hex recess a token sits in */
     --tok-slot: #e4d2a6;
+
+    /* 7 Wonders card colours, at the saturation the real cards have. Players say "the red card"
+       and "the purple card", so the button has to actually be that colour — muting these into the
+       parchment palette would make the game harder to score, not more tasteful. */
+    --sw-brown:  #8a5a34;
+    --sw-blue:   #2f6fa8;
+    --sw-green:  #3f8f5c;
+    --sw-yellow: #e0a92a;
+    --sw-red:    #b8402f;
+    --sw-purple: #6b4c9a;
+
+    /* extruded edges — each hue darkened ~22%, same rule as --tok-*-d */
+    --sw-brown-d:  #6b4526;
+    --sw-blue-d:   #235483;
+    --sw-green-d:  #2f6f46;
+    --sw-yellow-d: #b8871d;
+    --sw-red-d:    #91301f;
+    --sw-purple-d: #523874;
+
+    /* struck components. --sw-gold is sampled from the printed logo (#f0c000, the dominant
+       saturated hue across the wordmark) rather than guessed. */
+    --sw-gold:    #f0c000;
+    --sw-gold-d:  #b58c00;
+    --sw-war:     #b03a2c;
+    --sw-war-d:   #862a1f;
+    --sw-defeat:  #4e4a46;
+    --sw-defeat-d:#38352f;
+
+    /* ink dark enough to sit on gold: #2b2113 on --sw-gold measures 9.2:1 */
+    --sw-ink: #2b2113;
   }
   @media (prefers-color-scheme: dark){
     :root{
@@ -286,7 +316,7 @@
     align-items: center;
     justify-content: center;
     background: var(--pip, var(--green-dark));
-    color: #fff;
+    color: var(--pip-ink, #fff);
     font-variant-numeric: tabular-nums;
     font-weight: 800;
     line-height: 1;
@@ -677,18 +707,68 @@
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     color: var(--muted);
-    background: color-mix(in srgb, var(--tok-water) 18%, transparent);
+    background: color-mix(in srgb, var(--rung, var(--tok-water)) 18%, transparent);
     border-radius: 46% 54% 52% 48% / 54% 46% 54% 46%;
     padding: 4px 7px;
     min-width: 2.2em;
     transition: transform 0.12s ease;
   }
-  /* dark ink on the water blue: 4.58:1, where white would only manage 3.50:1 */
+  /* dark ink on the water blue: 4.58:1, where white would only manage 3.50:1.
+     --rung lets a game supply its own ladder hue. Whoever uses it next: measure the pairing, don't
+     assume this ink carries over. --sw-green with this same ink is only 4.04:1, which fails AA at
+     the rung's 11.5px — that mistake was caught in review here rather than in the wild. */
   .rung.on{
-    background: var(--tok-water);
+    background: var(--rung, var(--tok-water));
     color: #1b2416;
     transform: scale(1.14);
     box-shadow: inset 0 -1px 2px rgba(0,0,0,0.18), inset 0 1px 1px rgba(255,255,255,0.3);
+  }
+
+  /* 7 Wonders wears its own colours inside the scorer. The grand total deliberately stays
+     --accent in every game, so "the big orange blob is the final score" holds everywhere; what
+     changes here is the category and token pips, which take the wordmark's gold (#f0c000 sampled
+     from the printed logo) with --sw-ink over it at 9.2:1. */
+  #view-scorer[data-game="7wonders"]{
+    --pip: var(--sw-gold);
+    --pip-ink: var(--sw-ink);
+    /* deliberately no --rung: 7 Wonders draws no ladder. Science has three independent symbol
+       counts, which a single rung strip can't represent, so it explains itself with .cat-work
+       instead. */
+  }
+
+  /* "Show your working" — the line under a category that explains how its number was reached.
+     Science is the whole reason this exists: 3 tablets / 2 compasses / 1 gear scoring 21 is the
+     most-miscounted rule in the game, and seeing 9 + 4 + 1 and "1 set x 7" is what makes the
+     result trustworthy rather than magic. Set in the same dashed-underline pencil idiom as the
+     tally counts, because it is working-out, not a result. */
+  .cat-work{
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 3px 9px;
+    margin-top: 7px;
+    font-size: 0.74rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .cat-work .term{
+    border-bottom: 1px dashed var(--line);
+    padding-bottom: 2px;
+  }
+  .cat-work b{
+    color: var(--ink);
+    font-weight: 800;
+    margin-left: 3px;
+  }
+  .cat-work .term.nil{ opacity: 0.4; }
+  /* the set bonus is the part people forget entirely, so it gets the gold rather than the rule */
+  .cat-work .set{
+    color: var(--ink);
+    background: color-mix(in srgb, var(--sw-gold) 26%, transparent);
+    border-radius: 46% 54% 52% 48% / 54% 46% 54% 46%;
+    padding: 2px 8px;
+    border-bottom: none;
   }
 
   /* ---- by-category mode ---- */
@@ -1267,7 +1347,8 @@
 
 <div class="citation-footer">
   Benvenuto, J. (2024). Harmonies [Board game]. Libellud.<br>
-  Goupy, J., &amp; Lebrat, C. (2023). Faraway [Board game]. Catch Up Games.
+  Goupy, J., &amp; Lebrat, C. (2023). Faraway [Board game]. Catch Up Games.<br>
+  Bauza, A. (2010). 7 Wonders [Board game]. Repos Production.
 </div>
 
 </div><!-- /.page-inner -->
@@ -1384,10 +1465,13 @@ const MASCOTS = [
 
 // Small icon for the by-category tab strip — the same drawn tokens as the tally buttons, so the
 // strip reads as the same visual language rather than a separate icon set. A category's `art`
-// (tokenArt() kind) drives this when present; without one (bonus/spirit has no drawn token) it
-// falls back to the plain `icon` glyph, exactly like the old hardcoded switch's `default` arm did.
+// drives this when present — either a tokenArt() kind for the disc-shaped games, or a function
+// returning its own SVG for a game whose components aren't discs (7 Wonders draws cards and struck
+// tokens). Without one (bonus/spirit has no drawn token) it falls back to the plain `icon` glyph,
+// exactly like the old hardcoded switch's `default` arm did.
 function catTabIcon(key){
   const c = scorer.cat(key);
+  if (typeof c.art === "function") return c.art();
   return c.art ? tokenArt(c.art, 1) : `<span class="tab-glyph">${scorer.icon(key)}</span>`;
 }
 
@@ -1630,6 +1714,14 @@ function patchScores(){
     });
 
     card.querySelectorAll("[data-sum]").forEach(el => setText(el, b[el.dataset.sum]));
+
+    // "Show your working" lines rebuild their inner markup rather than a single number, so they
+    // are patched by innerHTML. Same rule as every other hook: if a category renders one and it
+    // isn't wired here, it silently freezes — src/ui/card.test.js asserts the hook is present.
+    card.querySelectorAll("[data-work-for]").forEach(el => {
+      const c = scorer.cat(el.dataset.workFor);
+      if (c && c.work) el.innerHTML = c.work(p, variant());
+    });
   });
 }
 
@@ -1850,6 +1942,10 @@ document.getElementById("newGame").addEventListener("click", () => {
 function showView(name){
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("active", v.id === "view-" + name));
   document.getElementById("footerBar").style.display = name === "scorer" ? "flex" : "none";
+
+  // Lets a game restyle its own scorer through CSS custom properties (7 Wonders takes the
+  // wordmark's gold for its pips) without any game-specific branching in the render code.
+  if (game) document.getElementById("view-scorer").dataset.game = game.key;
 
   const logoWrap = document.getElementById("logoWrap");
   const masthead = document.getElementById("masthead");

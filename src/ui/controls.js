@@ -91,7 +91,7 @@ export function tallyControl(o){
     <div class="tally">
       <button class="tally-btn" data-role="tally" data-path="${o.path}" data-key="${o.key}"
               data-min="${o.min}" data-score-cat="${o.scoreCat}" aria-label="${escapeAttr(o.label)}">
-        ${tokenArt(o.art, o.height || 1)}
+        ${typeof o.art === "function" ? o.art() : tokenArt(o.art, o.height || 1)}
         ${o.pip != null
           ? `<span class="pip">${o.pip}</span>`
           : `<span class="tally-cap">${o.cap}</span>`}

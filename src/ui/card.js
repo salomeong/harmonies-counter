@@ -35,9 +35,17 @@ export function catBody(scorer, p, key, opts = {}){
   }
 
   const canType = scorer.canType(key);
+  const cat = scorer.cat(key);
+  // A category may explain how its number was reached (7 Wonders' science: 9 + 4 + 1, plus the
+  // set bonus everyone forgets). It rebuilds on every patch via [data-work-for], so it must not
+  // be rendered without that hook — the card tests assert exactly this.
+  const work = cat.work
+    ? `<div class="cat-work" data-work-for="${key}">${cat.work(p, variant)}</div>`
+    : "";
   return `
     <div class="cat-body">
-      ${scorer.cat(key).controls(p, variant)}
+      ${cat.controls(p, variant)}
+      ${work}
       <div class="cat-actions">
         <button class="mini-btn" data-role="resetCat" data-cat="${key}"
                 aria-label="Reset ${escapeAttr(scorer.label(key))} to zero">↺ Reset</button>

@@ -19,10 +19,23 @@ this file assumes it.
 
 Small, and each one gets harder once there is data worth keeping.
 
-1. **Turn on the Neon preview database branch.** Vercel → the Neon integration → *Create Database
-   Branch For Deployment → Preview*. Right now preview and production share one database, so the
-   next schema change has no rehearsal. Production should stay unticked — you don't want production
-   deploys branching.
+1. **Turn on the Neon preview database branch.** Right now preview and production share one
+   database, so the next schema change has no rehearsal.
+
+   In the Neon integration's *Configure faithful-tally* dialog there are **two different sets of
+   checkboxes**, and it is easy to read the wrong one:
+   - the **Environments** dropdown (Production / Preview / Development) — which environments
+     receive `DATABASE_URL` and friends. All three are already ticked; that is what makes
+     `vercel env pull` work locally.
+   - a separate **Create Database Branch For Deployment** row below it — `Preview` / `Production`.
+     **This is the one that matters, and both are currently off.**
+
+   Tick **Preview** only. Leave Production off: production should always be the main branch, not a
+   per-deployment branch.
+
+   Related: the dialog's **Sensitive** toggle is currently off. If it is ever switched on,
+   `vercel env pull` starts returning `DATABASE_URL=""` instead of failing, which reads as a CLI
+   bug — see [deploying.md](deploying.md).
 2. **Delete the retired `faithful-tally-preview` Vercel project.** It still answers on
    `harmonies-counter-gray.vercel.app` with a stale build, which is a confusing second live copy.
 

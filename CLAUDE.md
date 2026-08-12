@@ -24,7 +24,12 @@ the first tool call of the turn should be the skill.
 ## Architecture
 
 ```
+index.html          markup shell only — one <link>, one <script type="module" src="src/main.js">
+styles.css          every rule
 src/
+  main.js           boot + top-level DOM event listeners
+  state.js          S (the one mutable state object), variant(), per-game state, selectGame()
+  api.js            fetchJson + the four /api wrappers
   scoring.js        pure scoring + makeScorer()
   games/
     index.js        the GAMES registry
@@ -34,9 +39,9 @@ src/
   ui/
     controls.js     pure HTML-string builders (token art, tally, ladders, lists)
     art-7w.js       7 Wonders component art (cards, struck tokens, coins)
-    card.js         pure HTML-string builders for the player card (categoryBlock, catBody,
-                     playerCardBody, sumStrip) — see "Every rendered number needs a patch hook"
-index.html          <style> + <script type="module">: render/patch/wire and the views
+    card.js         player-card markup (categoryBlock, catBody, playerCardBody, sumStrip)
+    scorer.js       render / patchScores / wireCard — everything that draws a player card
+    views.js        showView, picker, landing, history, leaderboard, save banner, chrome sync
 ```
 
 `assets/` holds images; `api/` holds Vercel serverless functions backed by Neon Postgres
@@ -44,10 +49,23 @@ index.html          <style> + <script type="module">: render/patch/wire and the 
 
 **Still no build step, no framework, no bundler** — native ES modules and `node --test` need no
 toolchain, and Vercel serves `src/*.js` as static assets. That property is worth protecting; the
-"single file" rule that used to sit alongside it is not, and was retired when scoring moved out.
+"single file" rule that used to sit alongside it is not, and was retired once scoring needed to be
+testable.
 
-The seam is drawn at **testability**: `src/` holds pure functions with no DOM access, so they can be
-unit tested. `render()`, `patchScores()`, `wireCard()` and the views stay in `index.html`.
+**Only `main.js`, `ui/scorer.js` and `ui/views.js` touch `document`.** Everything else is either
+pure (`scoring.js`, `games/*`, `ui/controls.js`, `ui/card.js`, `ui/art-7w.js`) or plain state with
+no DOM (`state.js`, `api.js`). That's what makes the bulk of it unit-testable, and what would make
+a future framework port a view-layer port rather than a rewrite — so if you find yourself reaching
+for `document` outside those three, put the DOM work in the view layer and call it from there.
+
+**Shared mutable state is one exported object, `S`.** ES module bindings are read-only for
+importers, so a bare `export let players` cannot be reassigned by the code that uses it. Read
+`S.players`, write `S.players = …`, and **never destructure `S`** — destructuring snapshots the
+value and silently stops seeing later reassignments.
+
+`state.js` does not import `scorer.js`. `selectGame()` fires a callback registered by `main.js`
+(`onGameSelected(render)`) instead of calling `render()` directly — state shouldn't know about
+rendering, and it keeps the import graph acyclic.
 
 ### Tests
 
@@ -146,8 +164,9 @@ For fields, buildings, islands and river a typed total is *inverted back* into t
 
 - The player-card markup itself — `categoryBlock()`, `catBody()`, `playerCardBody()`, `sumStrip()`
   — lives in [src/ui/card.js](src/ui/card.js) as pure functions (game/scorer/player/opts in,
-  HTML string out). `index.html` creates the DOM node, sets `innerHTML` from these, and wires it
-  (`wireCard()`) — nothing that touches `document` lives in `card.js`.
+  HTML string out). [src/ui/scorer.js](src/ui/scorer.js) creates the DOM node, sets `innerHTML`
+  from these, and wires it (`wireCard()`) — nothing that touches `document` lives in `card.js`.
+  Keeping that line sharp is what lets the markup be tested at all.
 - `render()` rebuilds the container; use it only for **structural** change (add/remove player,
   add/remove animal card, open/close a drawer, mode or water-side switch).
 - `patchScores()` updates numbers **in place** and is what every tap calls. Taps arrive fast; a

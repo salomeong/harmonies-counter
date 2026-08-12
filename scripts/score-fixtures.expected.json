@@ -1,0 +1,132 @@
+[
+  {
+    "name": "all-zero",
+    "variant": {
+      "waterSide": "river"
+    },
+    "breakdown": {
+      "landscape": 0,
+      "animals": 0,
+      "spirit": 0,
+      "total": 0
+    },
+    "totalPoints": 0
+  },
+  {
+    "name": "typical mid-game board",
+    "variant": {
+      "waterSide": "river"
+    },
+    "breakdown": {
+      "landscape": 46,
+      "animals": 8,
+      "spirit": 2,
+      "total": 56
+    },
+    "totalPoints": 56
+  },
+  {
+    "name": "every category non-zero",
+    "variant": {
+      "waterSide": "river"
+    },
+    "breakdown": {
+      "landscape": 72,
+      "animals": 12,
+      "spirit": 9,
+      "total": 93
+    },
+    "totalPoints": 93
+  },
+  {
+    "name": "river side (shared board, waterSide=river)",
+    "variant": {
+      "waterSide": "river"
+    },
+    "breakdown": {
+      "landscape": 77,
+      "animals": 10,
+      "spirit": 6,
+      "total": 93
+    },
+    "totalPoints": 93
+  },
+  {
+    "name": "island side (shared board, waterSide=island)",
+    "variant": {
+      "waterSide": "island"
+    },
+    "breakdown": {
+      "landscape": 86,
+      "animals": 10,
+      "spirit": 6,
+      "total": 102
+    },
+    "totalPoints": 102
+  },
+  {
+    "name": "short river, not overridden (exercises the interior ladder rungs)",
+    "variant": {
+      "waterSide": "river"
+    },
+    "breakdown": {
+      "landscape": 5,
+      "animals": 0,
+      "spirit": 0,
+      "total": 5
+    },
+    "totalPoints": 5
+  },
+  {
+    "name": "island side with islands: 0 (exercises the Math.max(1, ...) floor)",
+    "variant": {
+      "waterSide": "island"
+    },
+    "breakdown": {
+      "landscape": 5,
+      "animals": 0,
+      "spirit": 0,
+      "total": 5
+    },
+    "totalPoints": 5
+  },
+  {
+    "name": "multiple typed-total overrides",
+    "variant": {
+      "waterSide": "river"
+    },
+    "breakdown": {
+      "landscape": 107,
+      "animals": 50,
+      "spirit": 1,
+      "total": 158
+    },
+    "totalPoints": 158
+  },
+  {
+    "name": "override of exactly 0 (falsy-zero guard)",
+    "variant": {
+      "waterSide": "river"
+    },
+    "breakdown": {
+      "landscape": 0,
+      "animals": 0,
+      "spirit": 0,
+      "total": 0
+    },
+    "totalPoints": 0
+  },
+  {
+    "name": "string-typed raw values (fresh from <input>)",
+    "variant": {
+      "waterSide": "river"
+    },
+    "breakdown": {
+      "landscape": 40,
+      "animals": 5,
+      "spirit": 7,
+      "total": 52
+    },
+    "totalPoints": 52
+  }
+]

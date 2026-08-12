@@ -283,30 +283,36 @@ base `.toggle-group button` rule to win on specificity.
 
 ## Deploying
 
-There are **two separate Vercel projects**. `.vercel/project.json` in this folder links to the
-staging one — a deploy from here never touches production.
+**One project: `faithful-tally`.** `.vercel/project.json` links to it, and Vercel's own
+Production/Preview environments do the staging job.
 
-| Target | Vercel project | Public URL | Command |
-|---|---|---|---|
-| **Production** | `faithful-tally` | https://faithful-tally.vercel.app | separate project, not deployed from here |
-| Staging | `faithful-tally-preview` | https://harmonies-counter-gray.vercel.app | `vercel deploy --prod --yes` |
+| Target | Command | URL |
+|---|---|---|
+| Preview | `vercel deploy --yes` | `faithful-tally-<hash>-maxxyhs-projects.vercel.app` (SSO-gated) |
+| **Production** | `vercel deploy --prod --yes` | https://faithful-tally.vercel.app — **this is what your friend sees** |
 
-**The staging URL still says `harmonies-counter`, not `faithful-tally-preview`, and that's
-intentional — read before renaming anything again.** The project itself *is* named
-`faithful-tally-preview` (renamed 2026-08-10). But `vercel project rename` only renames the
-project; it does not mint a new short `<name>-<word>.vercel.app` alias, so the original
-`harmonies-counter-gray.vercel.app` from the project's first-ever deploy is still the only public,
-non-gated URL it has. The auto-generated alias that *does* contain the new name —
-`faithful-tally-preview-maxxyhs-projects.vercel.app` — is SSO-gated, because any alias containing
-the team slug is protected by default; it 302s to a Vercel login and only opens for someone logged
-into this Vercel team. Keep using the `-gray` URL as the link you actually hand to anyone.
+> ⚠️ **`--prod` now publishes to real users.** Until 2026-08-13 this folder was linked to a second
+> project (`faithful-tally-preview`), so `vercel deploy --prod` was the *safe* everyday command and
+> is written that way all over this file's history. It isn't any more. **Plain `vercel deploy` is
+> the everyday command; `--prod` is a deliberate act.**
 
-**Staging has its own `DATABASE_URL`** (added 2026-08-10, copied from `faithful-tally`'s Neon
-connection string — same database as production). Before that, every `/api/*` call on staging
-500'd with `{"error":"server_error"}` because the project had zero environment variables. If a
-fresh preview project is ever created from scratch, it needs this env var set explicitly —
-`vercel env ls` returning empty for a project is *not* a code bug, check that first before
-debugging `lib/db.mjs`.
+Preview URLs contain the team slug, so they 302 to a Vercel login — fine for testing while signed
+in, but not a link you can hand to anyone. That is the one thing the retired second project gave
+us (its `harmonies-counter-gray.vercel.app` alias predated the team-slug rule and stayed public).
+If a shareable pre-release link is ever needed again, add a proper domain rather than resurrecting
+a duplicate project.
+
+**Preview and production currently share one Neon database.** That is fine while the app is
+unreleased and stops being fine the moment real games are saved. The fix is already offered by the
+Neon integration: *Create Database Branch For Deployment → Preview*, which gives each preview
+deployment its own branch of the data. Turn that on before the first real game, and a schema change
+can be rehearsed on a preview branch instead of being run straight at production.
+
+**Applying a schema change:** `node --env-file=.env.local scripts/init-db.mjs`, after
+`vercel env pull` (see the note below on why that needs the Development environment). Look before
+you overwrite — `scripts/inspect-db.mjs` prints the tables and row counts of whatever
+`DATABASE_URL` currently points at, which is the cheapest way to find out you are aimed at
+production.
 
 **`vercel env pull` returns Production/Preview values as empty strings.** Vercel marks them
 *sensitive* by default (hence `vercel env add --no-sensitive`, "opt out of the sensitive default on
@@ -317,9 +323,13 @@ Development vars are not sensitive and do pull. In the dashboard you can tick De
 existing variable without re-entering the value.
 
 **A brand-new project's very first `vercel deploy` (no flags) is auto-promoted to production**
-regardless of the `--prod` flag being absent. This bit us once already: the first-ever deploy of
-what's now `faithful-tally-preview` went live as production by surprise. Every deploy after the
-first behaves normally (defaults to preview, `--prod` promotes).
+regardless of the `--prod` flag being absent. This bit us once already, on the first-ever deploy of
+the now-retired preview project. Every deploy after the first behaves normally (defaults to
+preview, `--prod` promotes) — so this only matters if a fresh project is ever created.
+
+**The retired `faithful-tally-preview` project still exists** (2026-08-13) and still answers on
+`harmonies-counter-gray.vercel.app`, now serving a stale build. Delete it when you're confident
+nothing points at it; until then, don't be confused by a second live copy of the app.
 
 ## Git
 

@@ -15,29 +15,30 @@ this file assumes it.
   waiting for a first real game.
 - One Vercel project. `vercel deploy` = preview, `vercel deploy --prod` = **real users**.
 
-## Do these before the first real game
+## Loose end worth closing
 
-Small, and each one gets harder once there is data worth keeping.
+**Delete the retired `faithful-tally-preview` Vercel project.** It still answers on
+`harmonies-counter-gray.vercel.app` with a stale build, which is a confusing second live copy of
+the app.
 
-1. **Turn on the Neon preview database branch.** Right now preview and production share one
-   database, so the next schema change has no rehearsal.
+## Decided: preview and production share one database
 
-   In the Neon integration's *Configure faithful-tally* dialog there are **two different sets of
-   checkboxes**, and it is easy to read the wrong one:
-   - the **Environments** dropdown (Production / Preview / Development) — which environments
-     receive `DATABASE_URL` and friends. All three are already ticked; that is what makes
-     `vercel env pull` work locally.
-   - a separate **Create Database Branch For Deployment** row below it — `Preview` / `Production`.
-     **This is the one that matters, and both are currently off.**
+Checked 2026-08-13. The Neon integration's *Create Database Branch For Deployment* checkboxes are
+**greyed out and unavailable** on this setup (they sit under a "Require Active Resource Before
+Deploy: Not Required" toggle, which may be what gates them). Maxx's call: sharing is fine for a
+three-friend app. Recorded so nobody re-opens it as an outstanding chore.
 
-   Tick **Preview** only. Leave Production off: production should always be the main branch, not a
-   per-deployment branch.
+What that costs, and how to work around it when it matters:
 
-   Related: the dialog's **Sensitive** toggle is currently off. If it is ever switched on,
-   `vercel env pull` starts returning `DATABASE_URL=""` instead of failing, which reads as a CLI
-   bug — see [deploying.md](deploying.md).
-2. **Delete the retired `faithful-tally-preview` Vercel project.** It still answers on
-   `harmonies-counter-gray.vercel.app` with a stale build, which is a confusing second live copy.
+- Preview deployments read and write the **same rows as production**. Once real games exist,
+  testing against a preview URL can touch them.
+- A schema change has no automatic rehearsal. **It does not have to be run blind, though** — Neon
+  supports branching by hand: create a branch in the Neon console, point a local `DATABASE_URL` at
+  it, run the change there, and only then run it against main. That is the same rehearsal the
+  integration would have automated.
+- Before anything destructive, run `node --env-file=.env.local scripts/inspect-db.mjs` — it prints
+  the tables and row counts of whatever `DATABASE_URL` currently points at. That is how the
+  pre-ledger data got noticed and snapshotted rather than silently dropped.
 
 ## Next features, roughly in order of payoff
 

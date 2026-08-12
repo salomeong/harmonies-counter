@@ -23,11 +23,16 @@ us (its `harmonies-counter-gray.vercel.app` alias predated the team-slug rule an
 If a shareable pre-release link is ever needed again, add a proper domain rather than resurrecting
 a duplicate project.
 
-**Preview and production currently share one Neon database.** That is fine while the app is
-unreleased and stops being fine the moment real games are saved. The fix is already offered by the
-Neon integration: *Create Database Branch For Deployment → Preview*, which gives each preview
-deployment its own branch of the data. Turn that on before the first real game, and a schema change
-can be rehearsed on a preview branch instead of being run straight at production.
+**Preview and production share one Neon database, deliberately** (decided 2026-08-13). The
+integration's *Create Database Branch For Deployment* checkboxes are greyed out on this setup, and
+sharing is an accepted trade for a three-friend app. Two consequences to hold in mind:
+
+- A preview deployment reads and writes the **same rows as production**. Testing against a preview
+  URL touches real games.
+- A schema change has no automatic rehearsal — but it need not be run blind. **Neon supports
+  branching by hand**: create a branch in the Neon console, point a local `DATABASE_URL` at it, run
+  the change there, then run it against main. Worth doing for anything destructive once real games
+  exist.
 
 **Applying a schema change:** `node --env-file=.env.local scripts/init-db.mjs`, after
 `vercel env pull` (see the note below on why that needs the Development environment). Look before

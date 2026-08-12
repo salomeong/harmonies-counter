@@ -15,12 +15,6 @@ this file assumes it.
   waiting for a first real game.
 - One Vercel project. `vercel deploy` = preview, `vercel deploy --prod` = **real users**.
 
-## Loose end worth closing
-
-**Delete the retired `faithful-tally-preview` Vercel project.** It still answers on
-`harmonies-counter-gray.vercel.app` with a stale build, which is a confusing second live copy of
-the app.
-
 ## Decided: preview and production share one database
 
 Checked 2026-08-13. The Neon integration's *Create Database Branch For Deployment* checkboxes are
@@ -65,8 +59,15 @@ photos inside Blob's Hobby allowance.
 
 ### Recaps and statistics
 Head-to-head records, win rates, "your best science score", how a game went. Needs the session view
-first. This is also the trigger to re-evaluate the no-framework decision — see CLAUDE.md's
-framework trigger (≥3 data-driven routes, or the first chart, or wanting TypeScript).
+first.
+
+**This is the piece that trips the framework trigger, so decide it deliberately rather than
+drifting into it.** CLAUDE.md's stated condition for adopting Next.js + TanStack Query is *≥3
+data-driven routes beyond the scorer, or the first chart, or wanting TypeScript* — and session
+view + recaps is two new routes plus charts. Make the call up front, in writing, at the start of
+that work. Both answers are defensible; discovering the question halfway through a build is not.
+Note the trap CLAUDE.md already flags: running vanilla and React side by side is usually worse
+than either, so if the trigger fires, migrate wholesale rather than half.
 
 ### 7 Wonders Duel
 Always exactly 2 players, so it wants a head-to-head two-column layout rather than stacked cards.

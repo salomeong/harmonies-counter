@@ -23,9 +23,29 @@ the first tool call of the turn should be the skill.
 
 ## Architecture
 
-Everything lives in **[index.html](index.html)** — a single file with a `<style>` block and a
-`<script>` block. No build step, no framework, no bundler. `assets/` holds images; `api/` holds
-Vercel serverless functions backed by Neon Postgres (`lib/db.mjs`, `schema.sql`).
+**Pure scoring logic lives in [src/scoring.js](src/scoring.js); everything else still lives in
+[index.html](index.html)** — a `<style>` block and a `<script type="module">` block. `assets/` holds
+images; `api/` holds Vercel serverless functions backed by Neon Postgres (`lib/db.mjs`,
+`schema.sql`).
+
+**Still no build step, no framework, no bundler** — native ES modules and `node --test` need no
+toolchain, and Vercel serves `src/*.js` as static assets. That property is worth protecting; the
+"single file" rule that used to sit alongside it is not, and was retired when scoring moved out.
+
+The seam is drawn at **testability**: `src/` holds pure functions with no DOM access, so they can be
+unit tested. `render()`, `patchScores()`, `wireCard()` and the views stay in `index.html`.
+
+### Tests
+
+```bash
+node --test                              # unit tests
+node scripts/score-fixtures.mjs --check  # characterization gate for refactors
+```
+
+Node's built-in runner — no dependencies, no config. `scripts/score-fixtures.expected.json` pins
+whole-player totals across risky states and is the gate for any scoring refactor. **When you change
+a scoring rule on purpose, regenerate it deliberately** (`node scripts/score-fixtures.mjs > …`) and
+say so; never regenerate it to make a red check go green.
 
 ### Scoring model
 
@@ -33,11 +53,20 @@ All scores funnel through one path so the badge, the `=` strip, the winner compa
 payload cannot disagree:
 
 ```
-derivedPoints(p, cat)  →  catPoints(p, cat)  →  breakdown(p)  →  totalPoints(p)
+derivedPoints(p, cat, variant) → catPoints(p, cat, variant) → breakdown(p, variant) → totalPoints(p, variant)
 ```
 
 `catPoints()` returns a typed override from `p.totals[cat]` when present, otherwise the derived
 value. **Never read a category score any other way.**
+
+`variant` is `{ waterSide }` — passed explicitly rather than read from a global, so the functions
+stay pure and testable. `index.html` has `const variant = () => ({ waterSide })`; call it at every
+call site.
+
+**Never pass one of these functions as a bare callback.** `players.map(totalPoints)` hands `map`'s
+*index* to `variant`, which silently flips river scoring to islands for every player after the
+first. Write `players.map(p => totalPoints(p, variant()))`. This already bit once; a wrong score
+doesn't throw, it just prints a plausible wrong number nobody re-checks.
 
 ### Three ways to enter a score
 
@@ -97,8 +126,8 @@ vercel dev --yes --listen 3000
 ```
 
 Prefer the Browser pane (`.claude/launch.json`, config `harmonies-counter`) over Bash for this.
-`/api/*` returns 500 in **local** `vercel dev` — `node_modules` isn't installed and there's no
-local `DATABASE_URL`. This is a local-only gap, not a broken feature: staging and production both
+`/api/*` returns 500 in **local** `vercel dev` — there's no local `DATABASE_URL`
+(`node_modules` used to be missing too; it's installed now for the tests). Both
 have a working DB (see Deploying below). Don't spend time trying to fix the DB locally; deploy to
 staging instead if you need to verify a DB-backed flow (save game, leaderboard, history).
 
@@ -140,6 +169,7 @@ first behaves normally (defaults to preview, `--prod` promotes).
 
 ## Git
 
-Remote is `salomeong/harmonies-counter`. The local `maxxyh` identity currently has **read-only**
-access, so pushes and PRs fail with a 403 until write access is granted. Commit locally; don't
-fork without asking.
+Remote is `salomeong/harmonies-counter`. The local `maxxyh` identity **has push access** (granted
+2026-08-12; it was previously read-only and 403'd, which is why older notes said to commit locally
+only). Don't fork without asking. CI runs `node --test` and the scoring-fixture check on every push
+— see [.github/workflows/test.yml](.github/workflows/test.yml).

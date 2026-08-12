@@ -1,0 +1,26 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The one dependency is only needed so lib/db.test.mjs can import lib/db.mjs.
+      - run: npm install
+
+      - name: Unit tests
+        run: node --test
+
+      # Characterization gate: whole-player totals across the risky board states.
+      # A failure here means a scoring rule changed. If that was deliberate, regenerate
+      # scripts/score-fixtures.expected.json in the same commit and say so in the message.
+      - name: Scoring fixtures
+        run: node scripts/score-fixtures.mjs --check

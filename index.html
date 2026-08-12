@@ -1303,11 +1303,14 @@
   <button id="newGameFa">New game</button>
 </div>
 
-<script>
-const STACK_PTS = { h1: 1, h2: 3, h3: 7 };
+<script type="module">
+import {
+  STACK_PTS, numOf, riverPoints, isTotalMode, catPoints, breakdown, totalPoints, inferFromTotal
+} from "./src/scoring.js";
 
 let activeGame = null;
 let waterSide = "river";
+const variant = () => ({ waterSide });
 let players = [];
 let nextId = 1;
 
@@ -1356,34 +1359,6 @@ function resetCat(p, cat){
     case "animals":   p.animals = [0]; break;
     case "bonus":     p.bonus = 0; break;
   }
-}
-
-// Fields, buildings, islands and river are one number scaled by a known rule, so a typed total
-// tells us the count outright. Recover it and drop back to tallying, rather than stranding the
-// category on a frozen number the tally rows no longer agree with. Stacks and animal cards are
-// genuinely ambiguous (13 could be many bucket combinations), so they keep the override.
-function inferFromTotal(p, cat, raw){
-  const total = Math.max(0, Math.trunc(numOf(raw)));
-
-  if (cat === "fields" || cat === "buildings"){
-    if (total % 5) return false;
-    p[cat] = total / 5;
-    return true;
-  }
-
-  if (cat === "water"){
-    if (waterSide !== "river"){
-      if (total % 5 || total < 5) return false;
-      p.islands = total / 5;
-      return true;
-    }
-    for (let len = 0; len <= 500; len++){
-      if (riverPoints(len) === total){ p.river = len; return true; }
-    }
-    return false;
-  }
-
-  return false;
 }
 
 // ---- Token art ----
@@ -1453,31 +1428,6 @@ function tokenArt(kind, height){
   </svg>`;
 }
 
-function numOf(v){
-  const n = parseFloat(v);
-  return Number.isFinite(n) ? n : 0;
-}
-
-function stackPoints(stack){
-  return numOf(stack.h1) * STACK_PTS.h1 + numOf(stack.h2) * STACK_PTS.h2 + numOf(stack.h3) * STACK_PTS.h3;
-}
-
-function riverPoints(len){
-  len = Math.max(0, Math.trunc(numOf(len)));
-  if (len < 2) return 0;
-  const table = { 2: 2, 3: 5, 4: 8, 5: 11, 6: 15 };
-  if (len <= 6) return table[len];
-  return 15 + (len - 6) * 4;
-}
-
-function animalPoints(p){
-  return p.animals.reduce((sum, v) => sum + numOf(v), 0);
-}
-
-function waterPoints(p){
-  return waterSide === "river" ? riverPoints(p.river) : Math.max(1, numOf(p.islands)) * 5;
-}
-
 const MASCOTS = [
   "assets/animal-fennec.png",
   "assets/animal-rabbit.png",
@@ -1485,45 +1435,6 @@ const MASCOTS = [
   "assets/animal-boar.png",
   "assets/animal-mouse.png"
 ];
-
-// ---- Scoring ----
-// Every score is read through catPoints(), so a category that has been overridden with a typed
-// total behaves identically to one that was tallied. The badge, the "=" strip, the winner
-// comparison and the save payload all funnel through breakdown() and cannot drift apart.
-
-const LAND_CATS = ["trees", "mountains", "fields", "buildings", "water"];
-
-function derivedPoints(p, cat){
-  switch (cat){
-    case "trees":     return stackPoints(p.trees);
-    case "mountains": return stackPoints(p.mountains);
-    case "fields":    return numOf(p.fields) * 5;
-    case "buildings": return numOf(p.buildings) * 5;
-    case "water":     return waterPoints(p);
-    case "animals":   return animalPoints(p);
-    case "bonus":     return numOf(p.bonus);
-    default:          return 0;
-  }
-}
-
-function isTotalMode(p, cat){
-  return p.totals && p.totals[cat] != null;
-}
-
-function catPoints(p, cat){
-  return isTotalMode(p, cat) ? numOf(p.totals[cat]) : derivedPoints(p, cat);
-}
-
-function breakdown(p){
-  const landscape = LAND_CATS.reduce((sum, cat) => sum + catPoints(p, cat), 0);
-  const animals = catPoints(p, "animals");
-  const spirit = catPoints(p, "bonus");
-  return { landscape, animals, spirit, total: landscape + animals + spirit };
-}
-
-function totalPoints(p){
-  return breakdown(p).total;
-}
 
 const CAT_ORDER = ["trees", "mountains", "fields", "buildings", "water", "animals", "bonus"];
 
@@ -1699,7 +1610,7 @@ function categoryBlock(p, cat){
       <button class="cat-head" data-role="openCat" data-cat="${cat}" aria-expanded="${open}">
         <span class="tok-dot" style="background:var(${meta.dot})"></span>
         <span class="cat-name">${meta.label}</span>
-        <span class="pip pip-score" data-pts-for="${cat}">${catPoints(p, cat)}</span>
+        <span class="pip pip-score" data-pts-for="${cat}">${catPoints(p, cat, variant())}</span>
         <span class="chev">${open ? "⌄" : "›"}</span>
       </button>
       ${open ? (showRules ? `<div class="cat-hint">${meta.hint}</div>` : "") + catBody(p, cat) : ""}
@@ -1900,7 +1811,7 @@ function patchScores(){
   const container = document.getElementById("players");
   if (!container) return;
 
-  const totals = players.map(totalPoints);
+  const totals = players.map(p => totalPoints(p, variant()));
   const maxTotal = totals.length ? Math.max(...totals) : -1;
   const leaders = totals.filter(t => t === maxTotal && maxTotal > 0).length;
 
@@ -1910,7 +1821,7 @@ function patchScores(){
     const card = container.querySelector(`[data-pid="${p.id}"]`);
     if (!card) return;
 
-    const b = breakdown(p);
+    const b = breakdown(p, variant());
     const isWinner = totals[idx] === maxTotal && maxTotal > 0 && players.length > 1;
     card.classList.toggle("winner", isWinner);
 
@@ -1919,7 +1830,7 @@ function patchScores(){
     card.querySelectorAll(".total-badge").forEach(el => setText(el, b.total));
 
     card.querySelectorAll("[data-pts-for]").forEach(el => {
-      setText(el, catPoints(p, el.dataset.ptsFor));
+      setText(el, catPoints(p, el.dataset.ptsFor, variant()));
     });
     card.querySelectorAll("[data-count-for]").forEach(el => {
       const [path, key] = el.dataset.countFor.split(":");
@@ -2033,7 +1944,7 @@ function wireCard(card, p){
       case "toTotal":
         // Seed with the current derived score so switching modes freezes the value rather
         // than changing it.
-        p.totals[cat] = catPoints(p, cat);
+        p.totals[cat] = catPoints(p, cat, variant());
         render();
         focusTotalInput(p.id, cat);
         break;
@@ -2086,7 +1997,7 @@ function wireCard(card, p){
   card.addEventListener("focusout", e => {
     const d = e.target.dataset;
     if (d.role !== "totalInput") return;
-    if (inferFromTotal(p, d.cat, e.target.value)){
+    if (inferFromTotal(p, d.cat, e.target.value, variant())){
       delete p.totals[d.cat];
       render();
     }
@@ -2520,7 +2431,7 @@ async function submitGame(game, buildPlayers, btnId, bannerId, retryFn){
 function saveGame(){
   return submitGame(
     "harmonies",
-    () => players.map(p => ({ name: p.name, total: totalPoints(p) })),
+    () => players.map(p => ({ name: p.name, total: totalPoints(p, variant()) })),
     "saveGame", "saveBanner", saveGame
   );
 }

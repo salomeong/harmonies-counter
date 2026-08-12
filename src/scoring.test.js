@@ -1,9 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  STACK_PTS, LAND_CATS, numOf, stackPoints, riverPoints, animalPoints, waterPoints,
-  derivedPoints, isTotalMode, catPoints, breakdown, totalPoints, inferFromTotal
+  STACK_PTS, numOf, stackPoints, riverPoints, animalPoints, isTotalMode, makeScorer
 } from './scoring.js';
+import { harmonies } from './games/harmonies.js';
+
+// A scorer bound to a fixed variant getter, for tests that don't care about switching sides
+// mid-test.
+function scorerFor(variant){
+  return makeScorer(harmonies, () => variant);
+}
 
 // ---- numOf ----
 
@@ -79,42 +85,46 @@ test('riverPoints: negative input floors to 0', () => {
   assert.equal(riverPoints(-5), 0);
 });
 
-// ---- waterPoints ----
+// ---- water scoring, via the "water" descriptor (harmonies.js) ----
+// There is no standalone waterPoints() anymore — the river/island split lives on the water
+// category's own `points(p, variant)`, reached here through scorer.derived() (the pre-override
+// value, same role the old waterPoints() played).
 
-test('waterPoints: river side scores via riverPoints(p.river)', () => {
+test('water scoring: river side scores via riverPoints(p.river)', () => {
   const p = { river: 4, islands: 1 };
-  assert.equal(waterPoints(p, { waterSide: 'river' }), 8);
+  assert.equal(scorerFor({ waterSide: 'river' }).derived(p, 'water'), 8);
 });
 
-test('waterPoints: island side scores 5 per island', () => {
+test('water scoring: island side scores 5 per island', () => {
   const p = { river: 0, islands: 3 };
-  assert.equal(waterPoints(p, { waterSide: 'island' }), 15);
+  assert.equal(scorerFor({ waterSide: 'island' }).derived(p, 'water'), 15);
 });
 
-test('waterPoints: islands floor — islands: 0 still scores 5 (Math.max(1, ...))', () => {
+test('water scoring: islands floor — islands: 0 still scores 5 (Math.max(1, ...))', () => {
   const p = { river: 0, islands: 0 };
-  assert.equal(waterPoints(p, { waterSide: 'island' }), 5);
+  assert.equal(scorerFor({ waterSide: 'island' }).derived(p, 'water'), 5);
 });
 
-test('waterPoints: missing variant defaults to river side', () => {
+test('water scoring: missing variant defaults to river side', () => {
   const p = { river: 6, islands: 9 };
-  assert.equal(waterPoints(p), 15);
+  assert.equal(scorerFor(undefined).derived(p, 'water'), 15);
 });
 
 // A malformed variant must fall back to river, not silently score the board as islands. Guarding
 // only against nullish is not enough: `{}.waterSide` is undefined, and `undefined !== "river"`
 // used to take the island branch. This is the same shape as the `players.map(totalPoints)` bug,
 // where map's index arrived as the variant.
-test('waterPoints: a malformed variant falls back to river rather than islands', () => {
+test('water scoring: a malformed variant falls back to river rather than islands', () => {
   const p = { river: 6, islands: 9 };
   for (const bad of [{}, null, 0, 1, 2, 'island', [], true]){
-    assert.equal(waterPoints(p, bad), 15, `variant ${JSON.stringify(bad)} should score as river`);
+    assert.equal(scorerFor(bad).derived(p, 'water'), 15, `variant ${JSON.stringify(bad)} should score as river`);
   }
 });
 
-test('inferFromTotal: a malformed variant infers on the river branch, not islands', () => {
+test('water infer: a malformed variant infers on the river branch, not islands', () => {
   const p = { river: 0, islands: 1 };
-  assert.equal(inferFromTotal(p, 'water', 11, {}), true);
+  const scorer = scorerFor({});
+  assert.equal(scorer.infer(p, 'water', 11), true);
   assert.equal(p.river, 5);
   assert.equal(p.islands, 1, 'islands must be untouched on the river branch');
 });
@@ -133,7 +143,7 @@ test('animalPoints: string values (as typed into <input>) are coerced numericall
   assert.equal(animalPoints({ animals: ['1', '2', ''] }), 3);
 });
 
-// ---- isTotalMode / catPoints ----
+// ---- isTotalMode / scorer.catPoints ----
 
 test('isTotalMode: false when totals is empty or key absent', () => {
   assert.equal(isTotalMode({ totals: {} }, 'trees'), false);
@@ -145,7 +155,10 @@ test('isTotalMode: false when totals is empty or key absent', () => {
 test('isTotalMode: null is treated as absent, not as an override', () => {
   assert.equal(isTotalMode({ totals: { trees: null } }, 'trees'), false);
   assert.equal(isTotalMode({ totals: { trees: undefined } }, 'trees'), false);
-  assert.equal(catPoints({ totals: { trees: null }, trees: { h1: 0, h2: 0, h3: 1 } }, 'trees'), 7);
+  assert.equal(
+    scorerFor(undefined).catPoints({ totals: { trees: null }, trees: { h1: 0, h2: 0, h3: 1 } }, 'trees'),
+    7
+  );
 });
 
 test('isTotalMode: true when a total override is present, including 0', () => {
@@ -153,22 +166,22 @@ test('isTotalMode: true when a total override is present, including 0', () => {
   assert.equal(isTotalMode({ totals: { trees: 0 } }, 'trees'), true);
 });
 
-test('catPoints: a p.totals[cat] override wins over the derived value', () => {
+test('scorer.catPoints: a p.totals[cat] override wins over the derived value', () => {
   const p = { totals: { trees: 99 }, trees: { h1: 1, h2: 0, h3: 0 } };
-  assert.equal(catPoints(p, 'trees'), 99);
+  assert.equal(scorerFor(undefined).catPoints(p, 'trees'), 99);
 });
 
-test('catPoints: an override of exactly 0 is honored, not treated as absent (falsy-0 bug)', () => {
+test('scorer.catPoints: an override of exactly 0 is honored, not treated as absent (falsy-0 bug)', () => {
   const p = { totals: { trees: 0 }, trees: { h1: 5, h2: 5, h3: 5 } };
-  assert.equal(catPoints(p, 'trees'), 0);
+  assert.equal(scorerFor(undefined).catPoints(p, 'trees'), 0);
 });
 
-test('catPoints: falls back to derivedPoints when no override is present', () => {
+test('scorer.catPoints: falls back to the derived value when no override is present', () => {
   const p = { totals: {}, trees: { h1: 1, h2: 1, h3: 1 } };
-  assert.equal(catPoints(p, 'trees'), stackPoints(p.trees));
+  assert.equal(scorerFor(undefined).catPoints(p, 'trees'), stackPoints(p.trees));
 });
 
-test('derivedPoints: dispatches every category correctly', () => {
+test('category descriptors dispatch every category correctly (no more switch(cat))', () => {
   const p = {
     trees: { h1: 1, h2: 0, h3: 0 },
     mountains: { h1: 0, h2: 1, h3: 0 },
@@ -179,18 +192,21 @@ test('derivedPoints: dispatches every category correctly', () => {
     animals: [1, 2],
     bonus: 5
   };
-  assert.equal(derivedPoints(p, 'trees'), 1);
-  assert.equal(derivedPoints(p, 'mountains'), 3);
-  assert.equal(derivedPoints(p, 'fields'), 10);
-  assert.equal(derivedPoints(p, 'buildings'), 15);
-  assert.equal(derivedPoints(p, 'water', { waterSide: 'river' }), 8);
-  assert.equal(derivedPoints(p, 'water', { waterSide: 'island' }), 10);
-  assert.equal(derivedPoints(p, 'animals'), 3);
-  assert.equal(derivedPoints(p, 'bonus'), 5);
-  assert.equal(derivedPoints(p, 'nonsense'), 0);
+  const byKey = Object.fromEntries(harmonies.cats.map(c => [c.key, c]));
+  assert.equal(byKey.trees.points(p), 1);
+  assert.equal(byKey.mountains.points(p), 3);
+  assert.equal(byKey.fields.points(p), 10);
+  assert.equal(byKey.buildings.points(p), 15);
+  assert.equal(byKey.water.points(p, { waterSide: 'river' }), 8);
+  assert.equal(byKey.water.points(p, { waterSide: 'island' }), 10);
+  assert.equal(byKey.animals.points(p), 3);
+  assert.equal(byKey.bonus.points(p), 5);
+  // An unknown category key has no descriptor at all — scorer.catPoints() guards that case
+  // (there was no "default: return 0" arm to test once the switch went away).
+  assert.equal(scorerFor(undefined).catPoints(p, 'nonsense'), 0);
 });
 
-// ---- breakdown / totalPoints ----
+// ---- scorer.breakdown / scorer.total ----
 
 test('breakdown: landscape/animals/spirit grouping sums correctly', () => {
   const p = {
@@ -204,14 +220,14 @@ test('breakdown: landscape/animals/spirit grouping sums correctly', () => {
     animals: [4, 6],                      // 10
     bonus: 7                              // 7
   };
-  const b = breakdown(p, { waterSide: 'river' });
+  const b = scorerFor({ waterSide: 'river' }).breakdown(p);
   assert.equal(b.landscape, 1 + 3 + 5 + 5 + 2);
   assert.equal(b.animals, 10);
   assert.equal(b.spirit, 7);
   assert.equal(b.total, b.landscape + b.animals + b.spirit);
 });
 
-test('totalPoints: equals breakdown(p).total', () => {
+test('scorer.total: equals scorer.breakdown(p).total', () => {
   const p = {
     totals: {},
     trees: { h1: 0, h2: 0, h3: 1 },
@@ -223,66 +239,68 @@ test('totalPoints: equals breakdown(p).total', () => {
     animals: [0],
     bonus: 0
   };
-  assert.equal(totalPoints(p, { waterSide: 'river' }), breakdown(p, { waterSide: 'river' }).total);
+  const scorer = scorerFor({ waterSide: 'river' });
+  assert.equal(scorer.total(p), scorer.breakdown(p).total);
 });
 
-test('breakdown/totalPoints: LAND_CATS drives which categories count toward landscape', () => {
-  assert.deepEqual(LAND_CATS, ['trees', 'mountains', 'fields', 'buildings', 'water']);
+test('breakdown: the "landscape" sums group covers exactly trees/mountains/fields/buildings/water', () => {
+  const landscape = harmonies.sums.find(s => s.key === 'landscape');
+  assert.deepEqual(landscape.cats, ['trees', 'mountains', 'fields', 'buildings', 'water']);
 });
 
-// ---- inferFromTotal ----
+// ---- scorer.infer (replaces the old inferFromTotal) ----
 
-test('inferFromTotal: fields — a total divisible by 5 sets the count and returns true', () => {
+test('infer: fields — a total divisible by 5 sets the count and returns true', () => {
   const p = { fields: 0 };
-  assert.equal(inferFromTotal(p, 'fields', '15'), true);
+  assert.equal(scorerFor(undefined).infer(p, 'fields', '15'), true);
   assert.equal(p.fields, 3);
 });
 
-test('inferFromTotal: fields — a non-multiple of 5 returns false and mutates nothing', () => {
+test('infer: fields — a non-multiple of 5 returns false and mutates nothing', () => {
   const p = { fields: 2 };
-  assert.equal(inferFromTotal(p, 'fields', '17'), false);
+  assert.equal(scorerFor(undefined).infer(p, 'fields', '17'), false);
   assert.equal(p.fields, 2);
 });
 
-test('inferFromTotal: buildings — same 5-point rule as fields', () => {
+test('infer: buildings — same 5-point rule as fields', () => {
   const p = { buildings: 0 };
-  assert.equal(inferFromTotal(p, 'buildings', '20'), true);
+  assert.equal(scorerFor(undefined).infer(p, 'buildings', '20'), true);
   assert.equal(p.buildings, 4);
 
   const p2 = { buildings: 1 };
-  assert.equal(inferFromTotal(p2, 'buildings', '21'), false);
+  assert.equal(scorerFor(undefined).infer(p2, 'buildings', '21'), false);
   assert.equal(p2.buildings, 1);
 });
 
-test('inferFromTotal: islands — a total divisible by 5 (and >= 5) sets islands', () => {
+test('infer: islands — a total divisible by 5 (and >= 5) sets islands', () => {
   const p = { islands: 1 };
-  assert.equal(inferFromTotal(p, 'water', '15', { waterSide: 'island' }), true);
+  assert.equal(scorerFor({ waterSide: 'island' }).infer(p, 'water', '15'), true);
   assert.equal(p.islands, 3);
 });
 
-test('inferFromTotal: islands — below 5, or not a multiple of 5, returns false and mutates nothing', () => {
+test('infer: islands — below 5, or not a multiple of 5, returns false and mutates nothing', () => {
   const p = { islands: 1 };
-  assert.equal(inferFromTotal(p, 'water', '0', { waterSide: 'island' }), false);
+  assert.equal(scorerFor({ waterSide: 'island' }).infer(p, 'water', '0'), false);
   assert.equal(p.islands, 1);
 
   const p2 = { islands: 1 };
-  assert.equal(inferFromTotal(p2, 'water', '12', { waterSide: 'island' }), false);
+  assert.equal(scorerFor({ waterSide: 'island' }).infer(p2, 'water', '12'), false);
   assert.equal(p2.islands, 1);
 });
 
-test('inferFromTotal: river — every riverPoints(n) for n in 0..8 infers back to a length that scores the same', () => {
+test('infer: river — every riverPoints(n) for n in 0..8 infers back to a length that scores the same', () => {
   for (let n = 0; n <= 8; n++){
     const total = riverPoints(n);
     const p = { river: -1 };
-    const ok = inferFromTotal(p, 'water', String(total), { waterSide: 'river' });
+    const ok = scorerFor({ waterSide: 'river' }).infer(p, 'water', String(total));
     assert.equal(ok, true, `expected inference to succeed for total ${total} (n=${n})`);
     assert.equal(riverPoints(p.river), total, `riverPoints(inferred ${p.river}) should equal ${total}`);
   }
 });
 
-test('inferFromTotal: categories that keep their override (trees, mountains, animals, bonus) always return false', () => {
+test('infer: categories that keep their override (trees, mountains, animals, bonus) always return false', () => {
   for (const cat of ['trees', 'mountains', 'animals', 'bonus']){
     const p = {};
-    assert.equal(inferFromTotal(p, cat, '100'), false);
+    assert.equal(scorerFor(undefined).infer(p, cat, '100'), false);
   }
 });

@@ -46,6 +46,12 @@
 //                     handlers find the right field without a per-game switch.
 //   valueField string   name of the player scalar a single number input (`numField()`) writes to,
 //                     e.g. "bonus". Same idea as `listField`, for the single-input shape.
+//   min      number   default 0. The floor for this category's typed total — both the rendered
+//                     `<input min>` and the value `infer()` clamps a typed total to before passing
+//                     it on. Most categories can't score negative, so 0 is right almost everywhere;
+//                     a category that CAN (7 Wonders' military, -1 per defeat token) sets a lower
+//                     min so a typed -3 stays -3 instead of flooring to 0. Read only through
+//                     `scorer.min(key)` — never hardcode 0 in a control or `infer` clamp.
 //
 // `sums` declares the "=" strip. Its keys become `data-sum` attributes, and the groups must
 // partition `cats` exactly once each — there is a test asserting that.

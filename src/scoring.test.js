@@ -304,3 +304,71 @@ test('infer: categories that keep their override (trees, mountains, animals, bon
     assert.equal(scorerFor(undefined).infer(p, cat, '100'), false);
   }
 });
+
+// ---- scorer.min / negative-scoring categories (7 Wonders' military: -1 per defeat token) ----
+
+test('scorer.min: defaults to 0 for every existing Harmonies category', () => {
+  const scorer = scorerFor(undefined);
+  for (const key of scorer.keys){
+    assert.equal(scorer.min(key), 0, `${key} should default to min 0`);
+  }
+});
+
+test('scorer.min: returns the descriptor-declared min when present', () => {
+  const game = {
+    cats: [{
+      key: 'military', min: -99,
+      init: () => ({ military: 0 }),
+      points: p => numOf(p.military),
+      controls: () => '',
+      infer: (p, total) => { p.military = total; return true; },
+      detail: p => p.military
+    }]
+  };
+  const scorer = makeScorer(game, () => undefined);
+  assert.equal(scorer.min('military'), -99);
+});
+
+test('scorer.min: an unknown category key falls back to 0, same as canType', () => {
+  assert.equal(scorerFor(undefined).min('nonsense'), 0);
+});
+
+test('infer: a descriptor with a negative min lets a typed negative total through instead of flooring at 0', () => {
+  const game = {
+    cats: [{
+      key: 'military', min: -99,
+      init: () => ({ military: 0 }),
+      points: p => numOf(p.military),
+      controls: () => '',
+      infer: (p, total) => { p.military = total; return true; },
+      detail: p => p.military
+    }]
+  };
+  const scorer = makeScorer(game, () => undefined);
+  const p = { military: 0 };
+  assert.equal(scorer.infer(p, 'military', '-3'), true);
+  assert.equal(p.military, -3, 'a typed -3 must survive as -3, not be floored to 0');
+});
+
+test('infer: a negative min still floors a total below it (e.g. -150 clamps to -99)', () => {
+  const game = {
+    cats: [{
+      key: 'military', min: -99,
+      init: () => ({ military: 0 }),
+      points: p => numOf(p.military),
+      controls: () => '',
+      infer: (p, total) => { p.military = total; return true; },
+      detail: p => p.military
+    }]
+  };
+  const scorer = makeScorer(game, () => undefined);
+  const p = { military: 0 };
+  scorer.infer(p, 'military', '-150');
+  assert.equal(p.military, -99);
+});
+
+test('infer: the default min (0) still floors a negative typed total at 0, same as before this change (fields)', () => {
+  const p = { fields: 2 };
+  assert.equal(scorerFor(undefined).infer(p, 'fields', '-10'), true);
+  assert.equal(p.fields, 0, 'a negative total is clamped to the default min (0), same behaviour as the old hardcoded floor');
+});

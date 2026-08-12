@@ -23,10 +23,22 @@ the first tool call of the turn should be the skill.
 
 ## Architecture
 
-**Pure scoring logic lives in [src/scoring.js](src/scoring.js); everything else still lives in
-[index.html](index.html)** — a `<style>` block and a `<script type="module">` block. `assets/` holds
-images; `api/` holds Vercel serverless functions backed by Neon Postgres (`lib/db.mjs`,
-`schema.sql`).
+```
+src/
+  scoring.js        pure scoring + makeScorer()
+  games/
+    index.js        the GAMES registry
+    harmonies.js    ← the category-descriptor contract is documented here
+    faraway.js
+  ui/
+    controls.js     pure HTML-string builders (token art, tally, ladders, lists)
+    card.js         pure HTML-string builders for the player card (categoryBlock, catBody,
+                     playerCardBody, sumStrip) — see "Every rendered number needs a patch hook"
+index.html          <style> + <script type="module">: render/patch/wire and the views
+```
+
+`assets/` holds images; `api/` holds Vercel serverless functions backed by Neon Postgres
+(`lib/db.mjs`, `schema.sql`).
 
 **Still no build step, no framework, no bundler** — native ES modules and `node --test` need no
 toolchain, and Vercel serves `src/*.js` as static assets. That property is worth protecting; the
@@ -47,26 +59,59 @@ whole-player totals across risky states and is the gate for any scoring refactor
 a scoring rule on purpose, regenerate it deliberately** (`node scripts/score-fixtures.mjs > …`) and
 say so; never regenerate it to make a red check go green.
 
+### Adding a game
+
+A game is a **declaration**, not code. Write `src/games/<game>.js` following the contract in
+[src/games/harmonies.js](src/games/harmonies.js)'s header comment, register it in
+`src/games/index.js`, and add its key to `GAMES` in [lib/db.mjs](lib/db.mjs). Nothing in
+`index.html` should need a new branch. **If you find yourself adding `if (game.key === …)` to the
+render/patch/wire code, the descriptor contract is missing a field — add the field instead.** That
+branching is exactly how Faraway became a second copy of the whole scorer.
+
+A category can score below zero (7 Wonders' military: -1 per defeat token) by setting `min` on its
+descriptor (default 0) — it's the floor for both the rendered total `<input min>` and what
+`scorer.infer()` clamps a typed total to. `game.minPlayers` gates the remove-player button
+(`players.length > game.minPlayers` in `renderByPlayer`); it does NOT gate the winner/crown check,
+which stays `players.length > 1` on purpose (see the comment at that line — solo-player-isn't-a-
+winner is a different question from the game's legal minimum). A flat-layout game (no accordion)
+that wants its own card styling sets `cardClass` (Faraway sets `"fa"`) — `!game.accordion` used to
+double as that trigger, which would have silently handed Faraway's colours to any future flat game
+that didn't want them.
+
 ### Scoring model
 
 All scores funnel through one path so the badge, the `=` strip, the winner comparison and the save
 payload cannot disagree:
 
 ```
-derivedPoints(p, cat, variant) → catPoints(p, cat, variant) → breakdown(p, variant) → totalPoints(p, variant)
+cat.points(p, variant) → scorer.catPoints(p, key) → scorer.breakdown(p) → scorer.total(p)
 ```
 
-`catPoints()` returns a typed override from `p.totals[cat]` when present, otherwise the derived
-value. **Never read a category score any other way.**
+`makeScorer(game, getVariant)` binds one game declaration and is the only scoring surface the UI
+talks to. `scorer.catPoints()` returns a typed override from `p.totals[key]` when present, otherwise
+the category's derived value. **Never read a category score any other way.**
 
-`variant` is `{ waterSide }` — passed explicitly rather than read from a global, so the functions
-stay pure and testable. `index.html` has `const variant = () => ({ waterSide })`; call it at every
-call site.
+`scorer.total()` sums over **every** category, not over the `sums` groups, so a category
+accidentally left out of the `=` strip still reaches the badge instead of vanishing from scores. A
+test asserts `sums` partitions `cats` exactly once each.
 
-**Never pass one of these functions as a bare callback.** `players.map(totalPoints)` hands `map`'s
-*index* to `variant`, which silently flips river scoring to islands for every player after the
-first. Write `players.map(p => totalPoints(p, variant()))`. This already bit once; a wrong score
-doesn't throw, it just prints a plausible wrong number nobody re-checks.
+`variant` is `{ waterSide }` — passed in rather than read from a global, so descriptors stay pure
+and testable. `index.html` has `const variant = () => ({ waterSide })`.
+
+**Never pass a scoring function as a bare callback.** `players.map(scorer.total)` hands `map`'s
+*index* in as the second argument. That already bit once as `players.map(totalPoints)`, where the
+index arrived as `variant` and silently flipped river scoring to islands for every player after the
+first. Write `players.map(p => scorer.total(p))`. A wrong score doesn't throw — it prints a
+plausible wrong number nobody re-checks.
+
+### Every rendered number needs a patch hook
+
+Taps call `patchScores()`, not `render()`, so **any number in the markup that isn't wired to a
+`data-pts-for` / `data-sum` / `data-count-for` hook will silently freeze at its initial value.**
+This has already shipped once: Faraway's `.cat-pts` was rendered without `data-pts-for`, so its
+per-category scores sat at 0 while the total updated correctly. `src/ui/card.test.js` asserts every
+score-bearing element in every game's markup carries a hook — keep it passing rather than deleting
+the assertion.
 
 ### Three ways to enter a score
 
@@ -77,11 +122,15 @@ Players count differently, and all three are first-class per category:
 3. **Whole-category** — `✎ Enter total`, which freezes the number (`p.totals[cat]`)
 
 For fields, buildings, islands and river a typed total is *inverted back* into the count by
-`inferFromTotal()` and the category returns to tally mode. Stacks and animal cards are ambiguous
+`scorer.infer()` and the category returns to tally mode. Stacks and animal cards are ambiguous
 (13 could be many bucket combinations) so they keep the override.
 
 ### Rendering
 
+- The player-card markup itself — `categoryBlock()`, `catBody()`, `playerCardBody()`, `sumStrip()`
+  — lives in [src/ui/card.js](src/ui/card.js) as pure functions (game/scorer/player/opts in,
+  HTML string out). `index.html` creates the DOM node, sets `innerHTML` from these, and wires it
+  (`wireCard()`) — nothing that touches `document` lives in `card.js`.
 - `render()` rebuilds the container; use it only for **structural** change (add/remove player,
   add/remove animal card, open/close a drawer, mode or water-side switch).
 - `patchScores()` updates numbers **in place** and is what every tap calls. Taps arrive fast; a
@@ -90,7 +139,15 @@ For fields, buildings, islands and river a typed total is *inverted back* into t
   `data-pts-for`, `data-count-for`, `data-minus-for`, `data-sum`, `.total-badge`, `.crown`,
   `.ladder [data-rung]`.
 - Two modes share one `players` array: `renderByPlayer()` (accordion cards) and
-  `renderByCategory()` (tab strip + `reviewGrid()`).
+  `renderByCategory()` (tab strip + `reviewGrid()`). Both the card-sum strip and `reviewGrid()`'s
+  sub-columns are generated from `game.sums` in full — one column per declared group, never
+  hardcoded group keys. A group name that doesn't match a hardcoded column used to render a
+  literal "undefined" (`patchScores()` does `b[el.dataset.sum]`); driving both off `game.sums`
+  is what closed that.
+- `waterSide` is per-game state (in `gameState`, mirrored to the module-level `waterSide` the same
+  way `scoreMode` is), not a bare global — a second game with its own variant toggle can't collide
+  with Harmonies' River/Islands state. `selectGame()` resyncs both `#modeToggle` and `#waterToggle`
+  button `.active` classes from the restored state.
 
 ## Design rules that are load-bearing
 

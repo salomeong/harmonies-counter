@@ -117,14 +117,26 @@ export function makeScorer(game, getVariant){
 
     // Returns true when a typed total was inverted back into a count, so the category can drop out
     // of override mode. Categories with no `infer` are genuinely ambiguous and keep the override.
+    // The typed total is clamped to the descriptor's `min` (default 0), NOT hardcoded to 0 — a
+    // military category with `min: -99` must let a typed -3 stay -3, not get floored to 0.
     infer(p, key, raw){
       const c = byKey.get(key);
-      return c && c.infer ? !!c.infer(p, Math.max(0, Math.trunc(numOf(raw))), v()) : false;
+      if (!c || !c.infer) return false;
+      const floor = c.min != null ? c.min : 0;
+      return !!c.infer(p, Math.max(floor, Math.trunc(numOf(raw))), v());
     },
 
     canType(key){
       const c = byKey.get(key);
       return !!c && c.canType !== false;
+    },
+
+    // The floor a typed total (and the rendered <input min>) may go to. Defaults to 0 — most
+    // categories can't score negative — but 7 Wonders' military category needs -99 or so for
+    // defeat tokens. Never hardcode 0 for this; always read it through here.
+    min(key){
+      const c = byKey.get(key);
+      return c && c.min != null ? c.min : 0;
     }
   };
 

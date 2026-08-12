@@ -135,7 +135,7 @@ export function numberList(o){
   const {
     playerId, cat, values, uidPrefix = "",
     inputClass, inputmode, escapeValue = true,
-    rowHint, removeAriaLabel, addLabel
+    rowHint, removeAriaLabel, addLabel, min = 0
   } = o;
 
   const rows = values.map((v, i) => {
@@ -150,7 +150,7 @@ export function numberList(o){
       : "";
     return `
     <div class="animal-row">
-      <input ${classAttr}type="number" min="0"${modeAttr} value="${val}" data-role="listInput" data-cat="${cat}" data-index="${i}" data-uid="${uid}" />${hint}${remove}
+      <input ${classAttr}type="number" min="${min}"${modeAttr} value="${val}" data-role="listInput" data-cat="${cat}" data-index="${i}" data-uid="${uid}" />${hint}${remove}
     </div>`;
   }).join("");
 
@@ -159,8 +159,8 @@ export function numberList(o){
     </div>`;
 }
 
-export function numField(playerId, cat, value, placeholder){
-  return `<input class="num-input" type="number" min="0" inputmode="numeric" value="${escapeAttr(value)}" data-role="numInput" data-cat="${cat}" placeholder="${placeholder}" data-uid="p${playerId}-${cat}" />`;
+export function numField(playerId, cat, value, placeholder, min = 0){
+  return `<input class="num-input" type="number" min="${min}" inputmode="numeric" value="${escapeAttr(value)}" data-role="numInput" data-cat="${cat}" placeholder="${placeholder}" data-uid="p${playerId}-${cat}" />`;
 }
 
 export function escapeAttr(s){

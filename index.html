@@ -1280,10 +1280,11 @@
 
 <script type="module">
 import { GAMES, GAME_LIST, getGame } from "./src/games/index.js";
-import { makeScorer, numOf, isTotalMode } from "./src/scoring.js";
+import { makeScorer, numOf } from "./src/scoring.js";
 import {
   tokenArt, getCount, setCount, bumpCount, escapeAttr
 } from "./src/ui/controls.js";
+import { catBody, playerCardBody } from "./src/ui/card.js";
 
 // The active game declaration and the scorer bound to it (src/scoring.js's makeScorer). Every
 // score, label, hint, icon and control below is read through `scorer` — see CLAUDE.md's
@@ -1295,15 +1296,19 @@ let scorer = null;
 // data, so it stays exactly as it was even though `game.key` now carries the same information.
 let activeGame = null;
 
+// `waterSide` lives in per-game state (below) rather than as its own bare global, same reasoning
+// as players/activeCat/etc: a second game with its own River/Islands-shaped variant couldn't
+// otherwise avoid colliding with Harmonies' toggle. This local mirror is what `variant()` reads;
+// selectGame()/syncGameState() keep it in sync with `gameState` exactly like scoreMode.
 let waterSide = "river";
 const variant = () => ({ waterSide });
 
-// Players (plus category-mode state: activeCat/doneCats/scoreMode) are kept per-game, so
-// switching games and back doesn't just preserve scores — it puts you back exactly where you
+// Players (plus category-mode state: activeCat/doneCats/scoreMode/waterSide) are kept per-game,
+// so switching games and back doesn't just preserve scores — it puts you back exactly where you
 // left that game, same as the old app never tearing down Harmonies' one persistent session in
 // the first place (switching to Faraway and back used to be free precisely because Harmonies'
 // state was never touched by leaving it).
-const gameState = new Map(); // game key -> { players, nextId, activeCat, doneCats, scoreMode }
+const gameState = new Map(); // game key -> { players, nextId, activeCat, doneCats, scoreMode, waterSide }
 let players = [];
 let nextId = 1;
 
@@ -1316,7 +1321,8 @@ function ensureGameState(key){
       nextId: 3,
       activeCat: g.cats.length ? g.cats[0].key : null,
       doneCats: new Set(),
-      scoreMode: "player"
+      scoreMode: "player",
+      waterSide: "river"
     });
   }
   return gameState.get(key);
@@ -1329,7 +1335,7 @@ function ensureGameState(key){
 // does that on every call, which covers every path that changes them (in-place mutation, e.g. a
 // tally tap or doneCats.add(), needs no sync since it's the same object already stored in the map).
 function syncGameState(){
-  if (game) gameState.set(game.key, { players, nextId, activeCat, doneCats, scoreMode });
+  if (game) gameState.set(game.key, { players, nextId, activeCat, doneCats, scoreMode, waterSide });
 }
 
 function selectGame(key){
@@ -1344,12 +1350,14 @@ function selectGame(key){
   activeCat = st.activeCat;
   doneCats = st.doneCats;
   scoreMode = st.scoreMode;
+  waterSide = st.waterSide;
 
   const showSettingsBar = !!(g.categoryMode || g.waterToggle);
   document.getElementById("globalSettings").style.display = showSettingsBar ? "" : "none";
   document.getElementById("modeToggle").style.display = g.categoryMode ? "" : "none";
   document.getElementById("waterToggle").style.display = g.waterToggle ? "" : "none";
   document.querySelectorAll("#modeToggle button").forEach(b => b.classList.toggle("active", b.dataset.mode === scoreMode));
+  document.querySelectorAll("#waterToggle button").forEach(b => b.classList.toggle("active", b.dataset.side === waterSide));
 
   render();
 }
@@ -1383,63 +1391,10 @@ function catTabIcon(key){
   return c.art ? tokenArt(c.art, 1) : `<span class="tab-glyph">${scorer.icon(key)}</span>`;
 }
 
-// The scoring surface for one category: token buttons (or the frozen total), then the actions
-// that get you out of trouble. Shared by both modes so they can never drift apart. Only reached
-// for accordion games (Harmonies) — Faraway's flat form never calls this, it has no total-mode UI.
-function catBody(p, key){
-  if (isTotalMode(p, key)){
-    return `
-      <div class="cat-body">
-        <div class="total-edit">
-          <input class="total-input" type="number" min="0" inputmode="numeric"
-                 value="${escapeAttr(p.totals[key])}" data-role="totalInput" data-cat="${key}"
-                 data-uid="p${p.id}-total-${key}" aria-label="${escapeAttr(scorer.label(key))} total">
-          <button class="revert-btn" data-role="revert" data-cat="${key}"
-                  title="Back to tallying" aria-label="Back to tallying">↺</button>
-        </div>
-      </div>`;
-  }
-
-  const canType = scorer.canType(key);
-  return `
-    <div class="cat-body">
-      ${scorer.cat(key).controls(p, variant())}
-      <div class="cat-actions">
-        <button class="mini-btn" data-role="resetCat" data-cat="${key}"
-                aria-label="Reset ${escapeAttr(scorer.label(key))} to zero">↺ Reset</button>
-        ${canType ? `<button class="mini-btn" data-role="toTotal" data-cat="${key}"
-                aria-label="Type a total for ${escapeAttr(scorer.label(key))} instead of tallying">✎ Enter total</button>` : ""}
-      </div>
-    </div>`;
-}
-
-// Collapsed rows are the whole point of the accordion: a filled-in card reads as seven short
-// lines instead of seven full control panels. Drawers toggle independently so several can be
-// open at once, and the card header can throw them all open in one tap. Games without
-// `accordion` (Faraway) get the flat always-visible form instead — one div per category, no
-// drawer, no total-mode UI, matching Faraway's markup from before this was generic.
-function categoryBlock(p, key){
-  if (!game.accordion){
-    return `
-      <div class="category" data-cat="${key}">
-        <div class="cat-label">${scorer.label(key)}</div>
-        <div class="cat-pts" data-pts-for="${key}">${scorer.catPoints(p, key)}</div>
-        ${scorer.cat(key).controls(p, variant())}
-        <div class="cat-hint">${scorer.hint(key)}</div>
-      </div>`;
-  }
-  const open = p.open.has(key);
-  return `
-    <div class="category acc${open ? " open" : ""}" data-cat="${key}">
-      <button class="cat-head" data-role="openCat" data-cat="${key}" aria-expanded="${open}">
-        <span class="tok-dot" style="background:var(${scorer.dot(key)})"></span>
-        <span class="cat-name">${scorer.label(key)}</span>
-        <span class="pip pip-score" data-pts-for="${key}">${scorer.catPoints(p, key)}</span>
-        <span class="chev">${open ? "⌄" : "›"}</span>
-      </button>
-      ${open ? (showRules ? `<div class="cat-hint">${scorer.hint(key)}</div>` : "") + catBody(p, key) : ""}
-    </div>`;
-}
+// catBody/categoryBlock/playerCardBody/sumStrip (the markup builders these used to be) now live
+// in src/ui/card.js as pure functions — see CLAUDE.md's "Every rendered number needs a patch
+// hook" section for why that move happened. index.html still owns everything that touches the
+// DOM: creating elements, calling render()/patchScores(), and wiring events.
 
 function render(){
   syncGameState();
@@ -1486,40 +1441,22 @@ function render(){
 }
 
 function renderByPlayer(container){
-  const totalBadgeClass = game.accordion ? "pip pip-total total-badge" : "total-badge";
-  const sumsStrip = game.sums ? `
-      <div class="card-sum">
-        ${game.sums.map(s => `<span>${s.label} <b class="pip pip-sub" data-sum="${s.key}">0</b></span>`).join("\n        ")}
-        <span class="eq">=</span><span class="pip pip-total" data-sum="total">0</span>
-      </div>` : "";
-
   players.forEach((p, idx) => {
-    const allOpen = game.accordion && p.open.size === scorer.keys.length;
     const card = document.createElement("div");
-    card.className = "player-card" + (game.accordion ? "" : " fa");
+    // `cardClass` is an explicit opt-in (set by Faraway) rather than `!game.accordion` doubling
+    // as the trigger — a future flat-layout game with no cardClass gets plain `.player-card`
+    // styling instead of silently inheriting Faraway's `.fa` colours.
+    card.className = "player-card" + (game.cardClass ? " " + game.cardClass : "");
     card.dataset.pid = p.id;
 
-    card.innerHTML = `
-      <div class="player-header">
-        ${game.mascots ? `<img class="mascot" src="${MASCOTS[idx % MASCOTS.length]}" alt="">` : ""}
-        <input type="text" value="${escapeAttr(p.name)}" data-role="name" data-uid="p${p.id}-name" />
-        <span class="crown hidden">👑</span>
-        <span class="${totalBadgeClass}">0</span>
-        ${players.length > 1 ? '<button class="remove-player" data-role="remove" aria-label="Remove player">✕</button>' : ''}
-      </div>
-
-      ${game.accordion ? `
-      <div class="card-tools">
-        <button class="mini-btn" data-role="toggleAll" aria-expanded="${allOpen}">
-          ${allOpen ? "⌃ Collapse all" : "⌄ Expand all"}
-        </button>
-        <button class="mini-btn danger" data-role="resetPlayer">↺ Reset player</button>
-      </div>` : ""}
-
-      ${scorer.keys.map(key => categoryBlock(p, key)).join("")}
-
-      ${sumsStrip}
-    `;
+    card.innerHTML = playerCardBody(game, scorer, p, {
+      mascotSrc: MASCOTS[idx % MASCOTS.length],
+      // The game's declared minimum, not a hardcoded ">1" — a game whose rules require e.g. 3
+      // players (7 Wonders) must not let itself get tallied down to 1.
+      showRemove: players.length > game.minPlayers,
+      showRules,
+      variant: variant()
+    });
 
     container.appendChild(card);
     wireCard(card, p);
@@ -1574,7 +1511,7 @@ function renderByCategory(container){
         <span class="pip pip-score" data-pts-for="${activeCat}">0</span>
         <span class="total-badge small">0</span>
       </div>
-      ${catBody(p, activeCat)}
+      ${catBody(scorer, p, activeCat, { variant: variant() })}
     `;
     page.appendChild(row);
     wireCard(row, p);
@@ -1599,13 +1536,16 @@ function nextUndoneCat(){
   return "__review";
 }
 
-// The review grid is only ever shown for category-mode games (Harmonies today), and its compact
-// LAND/ANIM sub-columns are hardcoded to those two `sums` group keys rather than driving off
-// `game.sums` in full — Harmonies declares a third group ("spirit") that has never had a column
-// here. A future categoryMode game wanting different (or more) review columns would need its own
-// hook; this is one of the spots the registry abstraction leaks (see the refactor report).
+// The review grid is only ever shown for category-mode games (Harmonies today). Its sub-columns
+// are generated from `game.sums`, one per declared group — a game whose groups aren't named
+// "landscape"/"animals" used to render a literal "undefined" column here (patchScores() does
+// `b[el.dataset.sum]`), and Harmonies' own third group ("spirit") never got a column at all
+// because the two sub-columns were hardcoded. Rendering every group is a visible change for
+// Harmonies (a third "+ spirit" column now appears) — see CLAUDE.md/the refactor report for why
+// that was left as-is rather than truncated.
 function reviewGrid(){
   const keys = scorer.keys;
+  const sumGroups = game.sums || [];
   return `
     <div class="review-grid-wrap">
       <table class="review-grid">
@@ -1613,7 +1553,8 @@ function reviewGrid(){
           <tr>
             <th class="who">Player</th>
             ${keys.map(k => `<th title="${escapeAttr(scorer.label(k))}">${scorer.icon(k)}</th>`).join("")}
-            <th class="sub">LAND</th><th class="sub">ANIM</th><th class="grand">TOTAL</th>
+            ${sumGroups.map(s => `<th class="sub" title="${escapeAttr(s.label)}">${escapeAttr(s.label)}</th>`).join("")}
+            <th class="grand">TOTAL</th>
           </tr>
         </thead>
         <tbody>
@@ -1621,8 +1562,7 @@ function reviewGrid(){
             <tr data-pid="${p.id}">
               <td class="who">${escapeAttr(p.name)}</td>
               ${keys.map(k => `<td data-pts-for="${k}">0</td>`).join("")}
-              <td class="sub" data-sum="landscape">0</td>
-              <td class="sub" data-sum="animals">0</td>
+              ${sumGroups.map(s => `<td class="sub" data-sum="${s.key}">0</td>`).join("")}
               <td class="grand"><span class="pip pip-score" data-sum="total">0</span></td>
             </tr>`).join("")}
         </tbody>
@@ -1653,6 +1593,9 @@ function patchScores(){
     if (!card) return;
 
     const b = scorer.breakdown(p);
+    // Deliberately `players.length > 1`, NOT `game.minPlayers` — this gates "a solo player isn't
+    // a winner" (you can't beat nobody), a different question from the game's legal minimum
+    // (which gates the remove-player button in renderByPlayer instead).
     const isWinner = totals[idx] === maxTotal && maxTotal > 0 && players.length > 1;
     card.classList.toggle("winner", isWinner);
 

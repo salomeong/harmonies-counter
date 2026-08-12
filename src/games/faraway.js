@@ -63,6 +63,9 @@ export const faraway = {
   critters: false,      // no corner mascots
   mascots: false,        // no per-player mascot in the card header
   waterToggle: false,   // no River / Islands toggle — Faraway has no water category
+  cardClass: "fa",      // explicit opt-in to the `.player-card.fa` purple/orange styling — kept
+                         // separate from `accordion` so a future flat-layout game doesn't inherit
+                         // Faraway's colours just by also having `accordion: false`
 
   cats: [region, sanctuary]
   // no `sums` — Faraway's total is just region + sanctuary, with no "=" strip grouping to name.

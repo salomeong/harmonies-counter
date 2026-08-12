@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  TOK_RX, TOK_RY, escapeAttr, getCount, setCount, bumpCount, tallyControl, riverLadder, tokenArt
+  TOK_RX, TOK_RY, escapeAttr, getCount, setCount, bumpCount, tallyControl, riverLadder, tokenArt,
+  numberList, numField
 } from './controls.js';
 
 // ---- escapeAttr ----
@@ -193,4 +194,27 @@ test('tokenArt: height is floored at 1 even for 0 or missing height', () => {
 test('tokenArt: uses the exported TOK_RY for the disc ellipse', () => {
   const html = tokenArt('field', 1);
   assert.match(html, new RegExp(`ry="${TOK_RY}"`));
+});
+
+// ---- numberList / numField min option (Fix 1: negative-scoring categories) ----
+
+test('numberList: min defaults to 0 when not passed, same as before this option existed', () => {
+  const html = numberList({ playerId: 1, cat: 'animals', values: [0], addLabel: '+ Add' });
+  assert.match(html, /min="0"/);
+});
+
+test('numberList: a passed min overrides the default on every row', () => {
+  const html = numberList({ playerId: 1, cat: 'military', values: [0, -3], addLabel: '+ Add', min: -99 });
+  const mins = html.match(/min="-99"/g) || [];
+  assert.equal(mins.length, 2, 'every row input should carry the custom min');
+});
+
+test('numField: min defaults to 0 when not passed', () => {
+  const html = numField(1, 'bonus', 0, 'extra points');
+  assert.match(html, /min="0"/);
+});
+
+test('numField: a passed min overrides the default', () => {
+  const html = numField(1, 'military', -5, 'defeat tokens', -99);
+  assert.match(html, /min="-99"/);
 });

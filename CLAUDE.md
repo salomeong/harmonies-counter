@@ -308,6 +308,14 @@ fresh preview project is ever created from scratch, it needs this env var set ex
 `vercel env ls` returning empty for a project is *not* a code bug, check that first before
 debugging `lib/db.mjs`.
 
+**`vercel env pull` returns Production/Preview values as empty strings.** Vercel marks them
+*sensitive* by default (hence `vercel env add --no-sensitive`, "opt out of the sensitive default on
+Production and Preview"), which makes them write-only — `env pull` yields `DATABASE_URL=""` rather
+than failing, so it looks like a CLI bug and isn't. To run anything locally against the real
+database (`scripts/init-db.mjs`), add the variable to the **Development** environment as well;
+Development vars are not sensitive and do pull. In the dashboard you can tick Development on the
+existing variable without re-entering the value.
+
 **A brand-new project's very first `vercel deploy` (no flags) is auto-promoted to production**
 regardless of the `--prod` flag being absent. This bit us once already: the first-ever deploy of
 what's now `faithful-tally-preview` went live as production by surprise. Every deploy after the

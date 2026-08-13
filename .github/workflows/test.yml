@@ -11,13 +11,23 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
-      # The one dependency is only needed so lib/db.test.mjs can import lib/db.mjs.
       - run: npm install
 
-      - name: Unit tests
+      # Two runners, deliberately: node --test runs the framework-free core in src/ with no
+      # toolchain, vitest runs the React components in app/. See CLAUDE.md — merging them would
+      # put the tested scoring core behind a transform, which the port was careful not to do.
+      - name: Unit tests (src/)
         run: node --test
+
+      - name: Component tests (app/)
+        run: npm run test:ui
+
+      # The port deleted patchScores() and its data-*-hook assertions. These component tests are
+      # what replaced them: they simulate a real interaction and assert the rendered score changes.
+      - name: Build
+        run: npx next build
 
       # Characterization gate: whole-player totals across the risky board states.
       # A failure here means a scoring rule changed. If that was deliberate, regenerate

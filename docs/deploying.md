@@ -70,3 +70,26 @@ Remote is `salomeong/harmonies-counter`. The local `maxxyh` identity **has push 
 2026-08-12; it was previously read-only and 403'd, which is why older notes said to commit locally
 only). Don't fork without asking. CI runs `node --test` and the scoring-fixture check on every push
 — see [.github/workflows/test.yml](.github/workflows/test.yml).
+
+## The project was created as a static site, and that outlived the port
+
+`vercel.json` pins `"framework": "nextjs"`. **Do not remove it**, and do not assume the dashboard
+agrees with it.
+
+The Vercel project (`prj_FF7BzOer8dxAikO0yNkoEungcN0m`) was created on 2026-08-04 for the vanilla
+app, so its Framework Preset is **"Other"** with Output Directory *"`public` if it exists, or `.`"*.
+After the Next.js port that combination is silently wrong: `npm run build` runs `next build` and
+succeeds, the deployment reports `readyState: READY`, and then Vercel serves the `public/` directory
+as flat static files. `public/` holds only `assets/`, and `index.html` no longer exists — so **every
+route 404s, including `/api/*`, on a deployment that reported success.**
+
+Two things made that hard to see, and both are worth remembering:
+
+- `vercel deploy` printing a URL and `READY` says the *build* finished, not that the site works.
+  Curl the deployed URL before believing it.
+- SSO protection sits in front of the app, so an unauthenticated request 302s to a login page
+  whichever way the deployment is broken. A healthy-looking 302 proves only that the gate is there.
+  Check with protection off, or while signed in.
+
+Pinning the framework in `vercel.json` fixes it for every future deploy and for a fresh clone,
+rather than leaving the answer in dashboard state nobody can see from the repo.

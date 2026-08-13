@@ -33,6 +33,9 @@ app/
   g/[id]/
     page.jsx         the session recap — a Server Component, queries Postgres directly
     opengraph-image.jsx   share-preview card for the same route, via next/og
+  stats/
+    page.jsx          bare /stats: a game picker, same tile grid as the root picker
+    [game]/page.jsx    win rates, streaks, head-to-head, category bests — see "Stats" below
   _lib/
     format.js        formatDate — shared so the SPA and the recap can't drift
     mascots.js        the mascot image list — shared for a reason, see "RSC boundaries" below
@@ -44,8 +47,9 @@ app/
     Controls.jsx    renders the control SPECS a descriptor declares (tally, ladder, list, num)
     Card.jsx        CatBody / CategoryBlock / SumStrip / PlayerCard — the LIVE, editable card
     Recap.jsx        the READ-ONLY recap — deliberately does not reuse Card.jsx's editing chrome
-    ShareButton.jsx   client island on the recap page ("use client": clipboard copy)
+    ShareButton.jsx   client island on the recap and stats pages ("use client": clipboard copy)
     PhotoUpload.jsx   client island on the recap page (board photos — see "Board photos" below)
+    Stats.jsx          win-rate bars, head-to-head rows, category-best rows — see "Stats" below
     Scorer.jsx      the two render modes, review grid, category tab strip
   api/*/route.js    the six route handlers, backed by Neon Postgres (lib/db.mjs, schema.sql)
                      and, for photo-upload, Vercel Blob (lib/session.mjs, @vercel/blob)
@@ -54,6 +58,8 @@ lib/
   session.mjs         session+players+photos query (shared by GET /api/session and
                      app/g/[id]/page.jsx) plus the photo-upload helpers app/api/photo-upload
                      uses to check a session exists and to record a completed upload
+  stats.mjs           win-rate/streak/head-to-head SQL aggregates, plus the raw-row query
+                     app/stats/[game]/page.jsx reduces for category bests
 src/                ← framework-free, and deliberately so
   scoring.js        pure scoring + makeScorer() + fromDetail() (the recap's reconstruction path)
   api.js            fetchJson + the client-side /api wrappers
@@ -198,6 +204,36 @@ before dropping the session row — `session_photos` cascades the *database* row
 image bytes in Blob storage don't go away without an explicit call. To remove a single test photo
 without touching the session it belongs to, use `--delete-photo <url>` instead — see "Running it"
 below for why that distinction is load-bearing, not a nicety.
+
+### Stats (`/stats/[game]`, `lib/stats.mjs`)
+
+Win rates, streaks, head-to-head and per-category bests — a Server Component, same shape as
+`/g/[id]`. Follows docs/ledger.md's seam precisely: win rate/streak/head-to-head are real-column
+SQL aggregates (`is_winner`, self-joined `session_players` on `session_id` for head-to-head); a
+category best is **not** — it's inside `detail` JSONB, so `getDetailRowsForStats()` returns raw
+rows and the page reduces them with the same `scorer.fromDetail()` the recap route uses. That's a
+genuine O(every row) cost on every page load; promote it to a column if it ever gets slow, per
+docs/ledger.md.
+
+**Category bests reconstruct each row under its OWN session's `variant`, never a shared default.**
+Harmonies' water category scores differently on River vs Islands — feeding every row through one
+scorer bound to a fixed variant would silently misscore whichever rows didn't match it.
+`app/stats/[game]/page.jsx` memoizes one scorer per distinct variant actually seen rather than
+reusing one wrong. The category *label* shown (e.g. "River" vs "Islands") does still come from a
+single default-variant scorer, since that's read-only display metadata — a best achieved on
+Islands can end up captioned "River" if that's what the rest of the game's history used. The
+*number* is always correct; only the caption can be cosmetically off. Documented, not silently
+accepted.
+
+`computeStreaks()` (`lib/stats.mjs`) is the pure half of streak calculation, deliberately pulled out
+of the SQL-fetching function so it has its own test (`lib/stats.test.mjs`, `node --test`) with no
+database involved. It found a real bug in itself: the first version marked a broken streak by
+simply skipping the breaking row, without recording that the streak was OVER — so a later (older)
+row that happened to match the streak's original direction would silently resume extending it (win,
+win, **loss**, win, win produced streak `4`, not the correct `2`). A hand-checked 3-game browser
+test never would have caught this; it takes 4+ games with the break in the middle. Fixed by
+tracking a `broken` flag per person once the direction changes, and no further row for that person
+can touch their streak again.
 
 ### Adding a game
 

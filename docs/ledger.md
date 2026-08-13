@@ -17,6 +17,14 @@ entered state built by `scorer.detail(p)` — never derived points, because `{"s
 reconstruct "3 tablets, 2 compasses, 1 gear", and a recap that wants to show what someone *built*
 would be blocked by data we captured but shaped badly.
 
+`/stats/[game]`'s per-category bests (`lib/stats.mjs`'s `getDetailRowsForStats`) is the seam's first
+real tension: "best science score ever" is a cross-game ranking by the letter of that rule, which
+argues for a column, but the only way to compute it is scoring every row's `detail` in application
+code — because a category's points, unlike `total_score`, were never written down anywhere as a
+number. Deferred on purpose while the table is small enough that reading every row on every page
+load doesn't matter; this is the first candidate to promote to a real column (written at save time,
+alongside `total_score`) if that ever changes.
+
 - **`total_score` is authoritative and never recomputed** from `detail`, so fixing a scoring rule
   or adding an expansion can't retroactively rewrite what happened. `display_name` is snapshotted
   per seat for the same reason.

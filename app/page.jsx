@@ -129,6 +129,7 @@ export default function Page(){
             <div className="landing-hint">
               <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "scorer" })}>Just tally a game →</button>
               <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "leaderboard" })}>🏆 Leaderboard</button>
+              {state.activeGame ? <Link href={`/stats/${state.activeGame}`} className="link-btn">📊 Stats</Link> : null}
               <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "picker" })}>🎲 Switch game</button>
             </div>
           </div>
@@ -222,7 +223,7 @@ export default function Page(){
         <div className={"view" + (view === "leaderboard" ? " active" : "")} id="view-leaderboard">
           <div className="top-links">
             <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "landing" })}>← Back</button>
-            <span />
+            {state.activeGame ? <Link href={`/stats/${state.activeGame}`} className="link-btn">📊 Stats</Link> : <span />}
           </div>
           <div className="history-card">
             <div className="history-title">🏆 Leaderboard</div>

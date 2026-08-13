@@ -1,8 +1,9 @@
 # What's next
 
 Written 2026-08-13, at the end of the work that added 7 Wonders and turned the app into a ledger.
-Updated the same day once the Next.js port and the session recap shipped. Everything here is
-deliberately deferred, not forgotten. Read [CLAUDE.md](../CLAUDE.md) first — this file assumes it.
+Updated the same day as the Next.js port, the session recap, board photos and stats all shipped —
+this was one long session, not several. Everything below is deliberately deferred, not forgotten.
+Read [CLAUDE.md](../CLAUDE.md) first — this file assumes it.
 
 ## Where things stand
 
@@ -10,14 +11,21 @@ deliberately deferred, not forgotten. Read [CLAUDE.md](../CLAUDE.md) first — t
   fourth should need no new branch in any component.
 - **The app is Next.js 16 + React 19 + TanStack Query**, adopted wholesale on 2026-08-13. `src/`
   stays framework-free by design — see CLAUDE.md's "The framework decision" and "Architecture".
-- `node --test` (the framework-free core) plus Vitest (the React components) replace the vanilla
-  app's single suite and its DOM-level patch-hook check, which no longer applies now that React
-  removed the bug class it guarded. See CLAUDE.md's "Patch hooks are gone" section.
+- `node --test` (the framework-free core, 166 tests) plus Vitest (the React components, 40 tests)
+  replace the vanilla app's single suite and its DOM-level patch-hook check, which no longer applies
+  now that React removed the bug class it guarded. See CLAUDE.md's "Patch hooks are gone" section.
+- **The ledger is no longer just storage — it has a full read side**: `/g/[id]` (recap + OG cards),
+  `/stats/[game]` (win rates, streaks, head-to-head, category bests), and board photos via Vercel
+  Blob. `session_players.detail` and `session_photos`, both designed months before anything read
+  them, are now exactly what a real page queries.
 - The session ledger (`docs/ledger.md`) has its **first real game** as of 2026-08-13 — no longer
   empty. Treat `scripts/sessions.mjs`'s cleanup workflow as load-bearing, not optional, when testing
-  the save flow: preview, production and a local `.env.local` all point at the same rows.
+  the save flow: preview, production and a local `.env.local` all point at the same rows. Use
+  `--delete-photo` for a photo, `--delete` only when the whole session is what you mean — see
+  CLAUDE.md's "Running it" for why that distinction earned its own flag.
 - One Vercel project. `vercel deploy` = preview, `vercel deploy --prod` = **real users**.
-  `vercel.json` pins the framework to `nextjs` — see docs/deploying.md for why that matters.
+  `vercel.json` pins the framework to `nextjs` — see docs/deploying.md for why that matters. A
+  Vercel Blob store (`faithful-tally-photos`) is provisioned and linked alongside it.
 
 ## Decided: preview and production share one database
 
@@ -91,11 +99,31 @@ proven server-side by seeding six real rows and confirming both the UI hid the a
 direct request bypassing the UI was independently rejected with `too_many_photos`. What's only
 provable on a real deployment: the webhook itself landing a row and that row surviving a reload.
 
-### Recaps and statistics
-Head-to-head records, win rates, "your best science score", how a game went. The session recap this
-needs as a foundation now exists; this is the next layer on top of it, not blocked on anything new.
-Charts should be inline SVG in the house style (`tokenArt`/`art-7w.js`), not a chart library — see
-CLAUDE.md's design rules on why the app keeps real component colours instead of muting them.
+### ~~Recaps and statistics~~ — shipped 2026-08-13
+
+`/stats/[game]` (a Server Component, same shape as `/g/[id]`): win rates with a current streak,
+head-to-head records between every pair who've shared a session, and per-category bests ("your best
+science score", linked to the game that earned it). The bar chart is inline SVG in the house style
+— a filled pill in `--green-dark`, the same colour a scoring pip already uses — not a chart library.
+
+Verified with real multi-session data: three synthetic Harmonies games written directly via
+`POST /api/save-game` (not the UI — driving the live scorer through repeated save cycles hit the
+per-game state persistence working exactly as designed, which made it useless for constructing a
+clean deterministic test fixture), every win-rate/streak/head-to-head/category-best number hand
+-checked against what was actually written, then the three sessions and both throwaway `people` rows
+removed, leaving the real game untouched.
+
+**Found and fixed a real bug in streak calculation via its own unit test, not the browser check**:
+the first version marked a broken streak by skipping the breaking row without recording that the
+streak had ended, so a later (older) row matching the *original* direction would silently resume
+extending it — win/win/**loss**/win/win came out as streak 4, not the correct 2. The 3-game
+histories used for browser verification never happen to expose this (the break has to sit in the
+middle of 4+ games); `lib/stats.test.mjs`'s `computeStreaks()` test does. See CLAUDE.md's "Stats"
+section.
+
+Also mid-build: `--delete <session>` deleted the app's own first real saved game while cleaning up
+one test photo attached to it — recovered in full (see docs/deploying.md and CLAUDE.md's "Running
+it"), and `scripts/sessions.mjs --delete-photo` now exists specifically so that can't happen again.
 
 ### 7 Wonders Duel
 Always exactly 2 players, so it wants a head-to-head two-column layout rather than stacked cards.

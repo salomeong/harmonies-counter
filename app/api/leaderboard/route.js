@@ -5,18 +5,22 @@
 // number), so the leaderboard can link back to the game that earned it. DISTINCT ON picks exactly
 // one session_players row per person — the highest total_score, tie-broken by most recent — before
 // the outer query sorts the resulting one-row-per-person set by score.
-import { getSql, normalizeGame } from '../lib/db.mjs';
+import { NextResponse } from 'next/server';
+import { getSql, normalizeGame } from '../../../lib/db.mjs';
 
-export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'method_not_allowed' });
-    return;
-  }
+// This route reads process.env.DATABASE_URL through the lazy getSql() below — force-dynamic keeps
+// Next from trying to evaluate (and cache) it at `next build` time, when there is no database.
+export const dynamic = 'force-dynamic';
 
-  const game = normalizeGame(req.query.game);
+// Method routing (GET vs everything else) is now handled by App Router itself — a request with any
+// other method gets Next's automatic 405 response, so the manual `req.method !== 'GET'` check that
+// used to open this handler is gone.
+
+export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+  const game = normalizeGame(searchParams.get('game'));
   if (!game) {
-    res.status(400).json({ error: 'invalid_game' });
-    return;
+    return NextResponse.json({ error: 'invalid_game' }, { status: 400 });
   }
 
   try {
@@ -38,10 +42,9 @@ export default async function handler(req, res) {
       ) best
       ORDER BY "highScore" DESC, "displayName" ASC
     `;
-    res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({ leaderboard: rows });
+    return NextResponse.json({ leaderboard: rows }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     console.error('GET /api/leaderboard failed:', err);
-    res.status(500).json({ error: 'server_error' });
+    return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }
 }

@@ -50,8 +50,8 @@ test('newPlayer produces the same shape as index.html\'s old newPlayer, with the
   eq(Object.keys(p).sort().join(','), [...Object.keys(expectedFields), 'open'].sort().join(','),
     'newPlayer must have exactly the same own-keys as the old newPlayer');
 
-  assert.ok(open instanceof Set, 'open must be a Set');
-  deepEq([...open], ['trees'], 'open must start with only the first category open');
+  assert.ok(Array.isArray(open), 'open must be an array — it has to survive JSON and React re-renders');
+  deepEq(open, ['trees'], 'open must start with only the first category open');
 });
 
 test('newPlayer names a third player "Player 3", not "Player 4" (the bug this fixes)', () => {
@@ -75,7 +75,7 @@ test('resetPlayer returns every category to the same state as a fresh player (ex
   p.animals = [1, 2, 3, 4];
   p.bonus = 42;
   p.totals = { trees: 99, fields: 50 };
-  p.open = new Set(['trees', 'water']);
+  p.open = ['trees', 'water'];
 
   scorer.resetPlayer(p);
 
@@ -83,7 +83,7 @@ test('resetPlayer returns every category to the same state as a fresh player (ex
 
   eq(p.id, 5, 'resetPlayer must not touch id');
   eq(p.name, 'Custom Name', 'resetPlayer must not touch name');
-  deepEq([...p.open], ['trees', 'water'], 'resetPlayer must not touch open');
+  deepEq(p.open, ['trees', 'water'], 'resetPlayer must not touch open');
 
   for (const key of ['trees', 'mountains', 'fields', 'buildings', 'river', 'islands', 'animals', 'bonus', 'totals']){
     deepEq(p[key], fresh[key], `resetPlayer: "${key}" must match a freshly created player`);

@@ -11,7 +11,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sevenwonders } from './sevenwonders.js';
 import { makeScorer } from '../scoring.js';
-import { catBody } from '../ui/card.js';
 import { GAMES, GAME_LIST, getGame } from './index.js';
 import { GAMES as DB_GAMES } from '../../lib/db.mjs';
 
@@ -189,12 +188,16 @@ test("scorer.min: military floors at -6 (the true worst case), every other categ
   }
 });
 
-test('military has no infer (many token combos share a total) — but the rendered total-input min still reflects -6, not a hardcoded 0', () => {
+// `catBody`/`src/ui/card.js` are gone — CatBody is a React component now
+// (app/_components/Card.jsx), and the assertion that a rendered total-input's `min` actually
+// reflects scorer.min('military') (-6), not a hardcoded 0, lives at the component level in
+// app/_components/Card.test.jsx. What's still this file's job is the scoring-surface contract
+// CatBody reads from: scorer.min() and scorer.infer().
+test('military has no infer (many token combos share a total), and scorer.min() reports the true -6 floor a rendered total-input reads, not a hardcoded 0', () => {
   const s = scorer();
   const p = s.newPlayer(1, 'P1');
   p.totals.military = -4; // enter total mode
-  const html = catBody(s, p, 'military', {});
-  assert.match(html, /min="-6"/);
+  assert.equal(s.min('military'), -6);
   assert.equal(s.infer(p, 'military', -4), false,
     'military has no infer function, so scorer.infer() must report false rather than clamp/mutate');
 });

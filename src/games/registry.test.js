@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { TOTALS_KEY } from '../scoring.js';
 import { GAMES, GAME_LIST, getGame } from './index.js';
 import { harmonies } from './harmonies.js';
 import { faraway } from './faraway.js';
@@ -71,4 +72,35 @@ test('sevenwonders declares all seven categories in the printed scorepad order, 
   assert.deepEqual(sevenwonders.cats.map(c => c.key),
     ['military', 'treasury', 'wonders', 'civilian', 'science', 'commercial', 'guilds']);
   assert.equal(sevenwonders.sums, undefined);
+});
+
+// ---- Invariant: every category that declares `detail` declares its inverse ----
+//
+// A category with `detail` but no `restore` writes state into the ledger that nothing can read
+// back, so a saved game would silently re-score as if that category were empty. Deliberately no
+// generic default inverse exists to fall back on: harmonies' `water` writes two top-level player
+// fields under one detail key, and Faraway's fameCat's key ("region") differs from its field
+// ("regionFame"), so `p[cat.key] = d` would quietly restore neither.
+
+test('every category declaring detail also declares restore, for every game', () => {
+  for (const game of GAME_LIST){
+    for (const c of game.cats){
+      if (!c.detail) continue;
+      assert.equal(typeof c.restore, 'function',
+        `${game.key}.${c.key}: declares detail() but no restore() — saved games would re-score as empty`);
+    }
+  }
+});
+
+// ---- Invariant: the reserved _totals key can never be shadowed by a category ----
+
+test('no category key starts with "_", keeping the reserved _totals key collision-proof', () => {
+  for (const game of GAME_LIST){
+    for (const c of game.cats){
+      assert.ok(/^[a-z][a-zA-Z0-9]*$/.test(c.key),
+        `${game.key}: category key "${c.key}" must match /^[a-z][a-zA-Z0-9]*$/ — a leading underscore ` +
+        `would collide with scorer.detail()'s reserved keys`);
+      assert.notEqual(c.key, TOTALS_KEY, `${game.key}: category key collides with the reserved ${TOTALS_KEY} key`);
+    }
+  }
 });

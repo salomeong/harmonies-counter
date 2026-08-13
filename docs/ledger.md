@@ -25,6 +25,26 @@ would be blocked by data we captured but shaped badly.
   and so appear in leaderboards and history.
 - `detail` keys are **permanent identifiers — add freely, never rename or repurpose**, or you
   orphan every game already saved under the old key.
+- **A typed whole-category total is raw entered state too, and lives under the reserved `_totals`
+  key.** It is literally what the human typed, so it belongs here — and it is not recoverable from
+  the per-category state, because "✎ Enter total" freezes `p.totals[cat]` and every later edit
+  touches only that, never the tally fields. Until 2026-08-13 `scorer.detail()` never read
+  `p.totals`, so a 7 Wonders game scored by typing totals saved
+  `science: {tablet:0,compass:0,gear:0}` beside a `total_score` of 62 — and **every** 7 Wonders
+  category is `infer: null`, so they all keep the override permanently. Values are stored exactly
+  as typed (a total may be the string `"21"`, or `""`) so the round trip is exact; `catPoints()`
+  already reads them through `numOf()`. The leading underscore cannot collide with a category:
+  `src/games/registry.test.js` asserts every declared key matches `/^[a-z][a-zA-Z0-9]*$/`.
+- **Every category that declares `detail` must declare `restore(p, d)`, its inverse**, and
+  `scorer.fromDetail(blob)` is the only way to read a row back. There is deliberately **no generic
+  default inverse** to fall back on — `p[cat.key] = d` is wrong for at least two live categories
+  (Harmonies' `water` writes two *top-level* fields under one detail key; Faraway's `region` writes
+  the field `regionFame`), and it would fail silently, re-scoring a saved board as empty. Because
+  `fromDetail` also restores `p.totals`, `catPoints`/`breakdown`/`total`/`work()` read a
+  reconstructed player unmodified — `isTotalMode()` cannot tell a live card from a Postgres row.
+- `fromDetail` returns `{ player, present }`. **`present` is load-bearing:** a category absent from
+  an older blob must render as absent, not as a hard 0, or the recap claims someone scored zero in
+  a category their game did not have.
 - The write is atomic via `sql.transaction([...])`. The neon HTTP driver has no interactive
   transactions, so the handler generates `public_id` up front and later statements resolve the
   session by it rather than needing an id back mid-transaction.

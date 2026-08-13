@@ -23,13 +23,17 @@ function fameCat({ key, field, label, hint }){
     listField: field,
     init: () => ({ [field]: [0] }),
     points: p => p[field].reduce((sum, v) => sum + numOf(v), 0),
-    controls: p => numberList({
+    controls: p => [numberList({
       playerId: p.id, cat: key, values: p[field], uidPrefix: "fa-",
       rowHint: "fame from this card",
       addLabel: "+ Add card"
-    }),
+    })],
     infer: null,
-    detail: p => p[field].map(numOf)
+    detail: p => p[field].map(numOf),
+    // Second reason a generic inverse can't exist (harmonies' water is the first): here the detail
+    // key and the player field are different names — key "region", field "regionFame" — so the
+    // restore has to be told which field it owns, exactly as `init` and `points` already are.
+    restore: (p, d) => { p[field] = Array.isArray(d) ? d.map(numOf) : []; }
   };
 }
 
@@ -52,8 +56,8 @@ const sanctuary = fameCat({
 export const faraway = {
   key: "faraway",
   label: "Faraway",
-  logo: "assets/faraway-logo.png",
-  tileArt: "assets/faraway-tile-art.jpg",
+  logo: "/assets/faraway-logo.png",
+  tileArt: "/assets/faraway-tile-art.jpg",
   tagline: "Journey home, reveal your fame",
   subtitle: "Reveal your cards right to left, add up the fame",
   minPlayers: 1,

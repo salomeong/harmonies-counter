@@ -10,7 +10,16 @@
 // session misrepresents what happened. Only NAMED players (not blank, not "Player N") get a
 // `people` row and therefore show up in leaderboards/history; unnamed/default-named players still
 // get a session_players row with person_id = NULL.
-import { getSql, normalizeName, isDefaultName, normalizeGame, normalizeEndedBy, makePublicId } from '../lib/db.mjs';
+import { NextResponse } from 'next/server';
+import { getSql, normalizeName, isDefaultName, normalizeGame, normalizeEndedBy, makePublicId } from '../../../lib/db.mjs';
+
+// This route reads process.env.DATABASE_URL through the lazy getSql() below — force-dynamic keeps
+// Next from trying to evaluate (and cache) it at `next build` time, when there is no database.
+export const dynamic = 'force-dynamic';
+
+// Method routing (POST vs everything else) is now handled by App Router itself — a request with
+// any other method gets Next's automatic 405 response, so the manual `req.method !== 'POST'` check
+// that used to open this handler is gone.
 
 const MAX_PLAYERS = 8; // generous upper bound — every game in GAMES tops out at 7 (7 Wonders)
 
@@ -74,21 +83,31 @@ function validate(body) {
   return { game, endedBy, variant, players, errors };
 }
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'method_not_allowed' });
-    return;
+export async function POST(request) {
+  // The original relied on Vercel parsing `req.body` for us. App Router hands us the raw Request,
+  // so we parse it ourselves — and a malformed or absent JSON body must fail the same way bad
+  // field values already do (400 invalid_request), not throw an unhandled exception. An empty/
+  // unparsable body is treated like `{}`: it falls through to the same field-level validation
+  // below and comes back with the same `invalid_game` / `missing_players` style details.
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    body = undefined;
   }
 
-  const { game, endedBy, variant, players, errors } = validate(req.body);
+  const { game, endedBy, variant, players, errors } = validate(body);
   if (errors.length) {
-    res.status(400).json({ error: 'invalid_request', details: errors });
-    return;
+    return NextResponse.json({ error: 'invalid_request', details: errors }, { status: 400 });
   }
-
-  const sql = getSql();
 
   try {
+    // getSql() is called inside this try (unlike a bare `sql = getSql()` before it) purely so a
+    // missing DATABASE_URL — which it throws for by design, see lib/db.mjs — lands in the same
+    // `server_error` JSON response as every other failure here, instead of escaping as an
+    // unhandled rejection. It still throws at call time, not at module load.
+    const sql = getSql();
+
     // ---- Named players: dedupe by name_key up front ----
     // A single INSERT ... ON CONFLICT can't affect the same conflict target twice, so two players
     // sharing a name_key (same person seated twice, or two guests both manually typed the exact
@@ -191,9 +210,9 @@ export default async function handler(req, res) {
       }
     }
 
-    res.status(200).json({ publicId, saved, celebrations });
+    return NextResponse.json({ publicId, saved, celebrations }, { status: 200 });
   } catch (err) {
     console.error('POST /api/save-game failed:', err);
-    res.status(500).json({ error: 'server_error' });
+    return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }
 }

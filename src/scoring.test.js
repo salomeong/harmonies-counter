@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  STACK_PTS, numOf, stackPoints, riverPoints, animalPoints, isTotalMode, makeScorer
+  STACK_PTS, numOf, stackPoints, riverPoints, animalPoints, isTotalMode, makeScorer, TOTALS_KEY
 } from './scoring.js';
 import { harmonies } from './games/harmonies.js';
 import { faraway } from './games/faraway.js';
@@ -470,4 +470,146 @@ test('detail: every category key in a game descriptor that declares detail appea
       if (c.detail) assert.ok(Object.prototype.hasOwnProperty.call(d, c.key), `${game.key}: missing detail key "${c.key}"`);
     }
   }
+});
+
+// ---- scorer.detail — typed overrides ride along under the reserved _totals key ----
+//
+// "✎ Enter total" freezes p.totals[cat] and every later edit touches only that, never the tally
+// fields. Without capturing it, a game entered that way saves raw state that misrepresents it.
+
+test('detail: a typed override is captured under the reserved _totals key', () => {
+  const scorer = makeScorer(sevenwonders, () => undefined);
+  const p = scorer.newPlayer(1, 'Typed');
+  p.totals.science = 21;
+  assert.deepEqual(scorer.detail(p)[TOTALS_KEY], { science: 21 });
+});
+
+test('detail: no _totals key at all when nothing was typed, so untouched rows stay lean', () => {
+  const scorer = makeScorer(sevenwonders, () => undefined);
+  const d = scorer.detail(scorer.newPlayer(1, 'Tallied'));
+  assert.ok(!Object.prototype.hasOwnProperty.call(d, TOTALS_KEY));
+});
+
+test('detail: an override is stored raw, exactly as typed — including the "" a cleared input leaves', () => {
+  const scorer = makeScorer(sevenwonders, () => undefined);
+  const p = scorer.newPlayer(1, 'Typed');
+  p.totals.science = '21';   // straight off an <input>, still a string
+  p.totals.treasury = '';    // cleared the field; isTotalMode still treats it as overridden
+  assert.deepEqual(scorer.detail(p)[TOTALS_KEY], { science: '21', treasury: '' });
+});
+
+// ---- scorer.fromDetail — the declared inverse ----
+
+// Distinct nonzero values in every field, so a restore that writes the wrong field or drops one
+// cannot coincidentally still score right.
+//
+// Each carries a typed override too, and deliberately one stored as a STRING — that is what an
+// <input> hands over, and it is the shape `_totals` promises to round-trip untouched. Without an
+// override in these fixtures the strongest assertion below (detail(restored) deepEquals detail)
+// never reaches `_totals` at all: coercing saved overrides through numOf() in fromDetail() left
+// all 163 tests green.
+const FULL_PLAYERS = [
+  [harmonies, () => ({
+    id: 1, name: 'Full', totals: { animals: '13' }, open: new Set(),
+    trees: { h1: 1, h2: 2, h3: 3 },
+    mountains: { h1: 4, h2: 5, h3: 6 },
+    fields: 7, buildings: 8,
+    river: 9, islands: 3,
+    animals: [11, 12, 13],
+    bonus: 14
+  })],
+  [faraway, () => ({
+    id: 1, name: 'Full', totals: { sanctuary: 8 }, open: new Set(),
+    regionFame: [1, 2, 3], sanctuaryFame: [4, 5]
+  })],
+  [sevenwonders, () => ({
+    id: 1, name: 'Full', totals: { science: '21' }, open: new Set(),
+    military: { w1: 1, w3: 2, w5: 3, loss: 4 },
+    treasury: 17,
+    wonders: [3, 4, 5], civilian: [6, 7],
+    science: { tablet: 3, compass: 2, gear: 1 },
+    commercial: [8], guilds: [9, 10]
+  })]
+];
+
+for (const [game, build] of FULL_PLAYERS){
+  for (const variant of [{ waterSide: 'river' }, { waterSide: 'island' }]){
+    test(`fromDetail: ${game.key} round-trips every category (waterSide=${variant.waterSide})`, () => {
+      const scorer = makeScorer(game, () => variant);
+      const p = build();
+      const { player: r, present } = scorer.fromDetail(scorer.detail(p));
+
+      assert.deepEqual(present.sort(), game.cats.map(c => c.key).sort(),
+        'every category in the blob must be reported present');
+
+      for (const c of game.cats){
+        assert.equal(scorer.catPoints(r, c.key), scorer.catPoints(p, c.key),
+          `${game.key}.${c.key}: restored player scores differently`);
+      }
+      assert.equal(scorer.total(r), scorer.total(p));
+
+      // The strongest statement: re-serialising the restored player reproduces the blob exactly.
+      assert.deepEqual(scorer.detail(r), scorer.detail(p));
+    });
+  }
+}
+
+test('fromDetail: a 7 Wonders game scored by typing totals re-scores correctly — the bug _totals exists to fix', () => {
+  const scorer = makeScorer(sevenwonders, () => undefined);
+  const p = scorer.newPlayer(1, 'Typed');
+  // Nobody tallied a symbol; they read the numbers off the board and typed them. Every 7 Wonders
+  // category is `infer: null`, so both stay frozen overrides.
+  p.totals.science = 21;
+  p.totals.treasury = 5;
+  assert.equal(scorer.total(p), 26);
+
+  const { player: r } = scorer.fromDetail(scorer.detail(p));
+  assert.equal(scorer.total(r), 26,
+    'before _totals this reconstructed as 0 — the tally fields are all still zero');
+  assert.equal(scorer.catPoints(r, 'science'), 21);
+  assert.deepEqual(r.science, { tablet: 0, compass: 0, gear: 0 },
+    'and the raw tally state really is empty, which is exactly why detail() alone was not enough');
+});
+
+test('fromDetail: an override sits on top of real tally state without erasing it', () => {
+  const scorer = makeScorer(harmonies, () => ({ waterSide: 'river' }));
+  const p = scorer.newPlayer(1, 'Mixed');
+  p.trees = { h1: 1, h2: 0, h3: 0 };   // really tallied one height-1 tree, worth 1
+  p.totals.trees = 99;                  // then overrode the category to 99
+  p.fields = 2;                         // and left fields honestly tallied
+
+  const { player: r } = scorer.fromDetail(scorer.detail(p));
+  assert.equal(scorer.catPoints(r, 'trees'), 99, 'the override wins, as it does on a live card');
+  assert.deepEqual(r.trees, { h1: 1, h2: 0, h3: 0 }, 'but the raw stack underneath survives');
+  assert.equal(scorer.catPoints(r, 'fields'), 10);
+});
+
+test('fromDetail: a category missing from the blob is absent from `present`, not silently a zero', () => {
+  const scorer = makeScorer(harmonies, () => ({ waterSide: 'river' }));
+  const full = scorer.detail(FULL_PLAYERS[0][1]());
+  delete full.bonus;   // a row saved before the game had this category
+
+  const { player: r, present } = scorer.fromDetail(full);
+  assert.ok(!present.includes('bonus'), 'the recap needs to tell "did not exist" from "scored 0"');
+  assert.ok(present.includes('trees'));
+  assert.equal(r.bonus, 0, 'it still starts from init(), so nothing downstream sees undefined');
+});
+
+test('fromDetail: tolerates malformed blobs rather than throwing — it is reading Postgres, not trusted input', () => {
+  for (const game of [harmonies, faraway, sevenwonders]){
+    const scorer = makeScorer(game, () => ({ waterSide: 'river' }));
+    for (const junk of [null, undefined, 'nope', 42, [], {}, { trees: 'x', military: 7, animals: 'no' }]){
+      const { player: r } = scorer.fromDetail(junk);
+      assert.equal(typeof scorer.total(r), 'number', `${game.key}: total must stay a number for ${JSON.stringify(junk)}`);
+      assert.ok(Number.isFinite(scorer.total(r)));
+    }
+  }
+});
+
+test('fromDetail: an unknown key inside _totals is ignored, not copied onto the player', () => {
+  const scorer = makeScorer(harmonies, () => ({ waterSide: 'river' }));
+  const { player: r } = scorer.fromDetail({ [TOTALS_KEY]: { trees: 5, retiredCategory: 99 } });
+  assert.equal(r.totals.trees, 5);
+  assert.ok(!('retiredCategory' in r.totals), 'a category dropped from the game must not resurface in totals');
+  assert.equal(scorer.total(r), 5, 'and it must not reach the score either');
 });

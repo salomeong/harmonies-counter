@@ -24,66 +24,101 @@ the first tool call of the turn should be the skill.
 ## Architecture
 
 ```
-index.html          markup shell only — one <link>, one <script type="module" src="src/main.js">
-styles.css          every rule
-src/
-  main.js           boot + top-level DOM event listeners
-  state.js          S (the one mutable state object), variant(), per-game state, selectGame()
-  api.js            fetchJson + the four /api wrappers
+styles.css          every rule — imported once by app/layout.jsx, otherwise untouched by the port
+app/
+  layout.jsx        <html>/<body>, metadata, Providers
+  providers.jsx     TanStack Query client
+  page.jsx          the interactive app: picker / landing / scorer / history / leaderboard
+  _state/
+    useTally.js     the reducer that replaced the mutable `S` object
+  _components/
+    Controls.jsx    renders the control SPECS a descriptor declares (tally, ladder, list, num)
+    Card.jsx        CatBody / CategoryBlock / SumStrip / PlayerCard
+    Scorer.jsx      the two render modes, review grid, category tab strip
+  api/*/route.js    the five route handlers, backed by Neon Postgres (lib/db.mjs, schema.sql)
+src/                ← framework-free, and deliberately so
   scoring.js        pure scoring + makeScorer()
+  api.js            fetchJson + the four /api wrappers
   games/
     index.js        the GAMES registry
     harmonies.js    ← the category-descriptor contract is documented here
     faraway.js
     sevenwonders.js
   ui/
-    controls.js     pure HTML-string builders (token art, tally, ladders, lists)
+    controls.js     control SPECS (data, not markup) + token art + count helpers
     art-7w.js       7 Wonders component art (cards, struck tokens, coins)
-    card.js         player-card markup (categoryBlock, catBody, playerCardBody, sumStrip)
-    scorer.js       render / patchScores / wireCard — everything that draws a player card
-    views.js        showView, picker, landing, history, leaderboard, save banner, chrome sync
 ```
 
-`assets/` holds images; `api/` holds Vercel serverless functions backed by Neon Postgres
-(`lib/db.mjs`, `schema.sql`).
+`public/assets/` holds images. **Asset paths are absolute (`/assets/…`)** — they were relative,
+which breaks the moment a route is not at `/`.
 
-**Still no build step, no framework, no bundler** — native ES modules and `node --test` need no
-toolchain, and Vercel serves `src/*.js` as static assets. That property is worth protecting; the
-"single file" rule that used to sit alongside it is not, and was retired once scoring needed to be
-testable.
+### The framework decision (2026-08-13)
 
-**Only `main.js`, `ui/scorer.js` and `ui/views.js` touch `document`.** Everything else is either
-pure (`scoring.js`, `games/*`, `ui/controls.js`, `ui/card.js`, `ui/art-7w.js`) or plain state with
-no DOM (`state.js`, `api.js`). That's what makes the bulk of it unit-testable, and what would make
-a future framework port a view-layer port rather than a rewrite — so if you find yourself reaching
-for `document` outside those three, put the DOM work in the view layer and call it from there.
+**Next.js 16 App Router + React 19 + TanStack Query, adopted wholesale.** Maxx's call, against a
+recommendation to stay vanilla. Recorded here because docs/next.md previously attributed a
+"framework trigger" to this file that was never in it — there was no rule, which is exactly why the
+decision needed writing down.
 
-**Shared mutable state is one exported object, `S`.** ES module bindings are read-only for
-importers, so a bare `export let players` cannot be reassigned by the code that uses it. Read
-`S.players`, write `S.players = …`, and **never destructure `S`** — destructuring snapshots the
-value and silently stops seeing later reassignments.
+What it bought: real routes, and `generateMetadata` on `/g/[id]` so a shared recap gets a per-session
+OG card — unreachable for a hash-routed static app at any price. It also removed the no-bundler
+constraint that made client-side Blob upload awkward.
 
-`state.js` does not import `scorer.js`. `selectGame()` fires a callback registered by `main.js`
-(`onGameSelected(render)`) instead of calling `render()` directly — state shouldn't know about
-rendering, and it keeps the import graph acyclic.
+What it cost: ~1,270 lines of working, tap-tested view code rewritten for no user-visible gain.
+
+**`src/` stays framework-free.** `scoring.js`, `games/*`, `ui/controls.js` and `ui/art-7w.js` import
+nothing from React or Next and moved through the port essentially unchanged — which is why all their
+tests kept running under `node --test` throughout and could serve as the migration's safety net. Keep
+it that way: if a game declaration ever imports React, the next port becomes a rewrite.
+
+**JavaScript, not TypeScript.** Deliberate, so the port did not also rewrite the tested core. TS is
+a clean follow-on, not a migration-time task.
+
+**Migrate away from this stack only if** a genuinely different rendering target appears (native, an
+embedded scorepad). Adding routes, charts or games is not a reason — those are what it is for.
+
+### Shared state
+
+`app/_state/useTally.js` is a `useReducer`, replacing the single mutable `S` object. Three things
+did not survive the translation, each on purpose:
+
+- **Nothing is mutated in place.** React decides what to re-render by referential equality, so
+  `p.trees.h1++` is invisible to it. Each action `structuredClone()`s the one player it touches and
+  hands the clone to the existing mutating helpers (`setCount`/`bumpCount`, `scorer.resetCat`,
+  `cat.infer`), so there is still exactly one implementation of every rule.
+- **`p.open` and `doneCats` are arrays, not `Set`s.** Sets don't survive JSON — which a player
+  restored from the ledger must — and they invite the in-place mutation above.
+- **Per-game state is still keyed by game key**, so Harmonies' River/Islands toggle cannot collide
+  with another game's variant. That property predates the port and is still load-bearing.
 
 ### Tests
 
 ```bash
-node --test                              # unit tests
+npm test                                 # node --test — the framework-free core in src/
+npm run test:ui                          # vitest — the React components in app/
 node scripts/score-fixtures.mjs --check  # characterization gate for refactors
 ```
 
-Node's built-in runner — no dependencies, no config. `scripts/score-fixtures.expected.json` pins
-whole-player totals across risky states and is the gate for any scoring refactor. **When you change
-a scoring rule on purpose, regenerate it deliberately** (`node scripts/score-fixtures.mjs > …`) and
-say so; never regenerate it to make a red check go green.
+**Two runners, deliberately.** `node --test` runs `src/` with no config and no toolchain; Vitest
+runs the components. Merging them would mean putting the tested scoring core behind a transform,
+which is the one thing the port was careful not to do. Vitest's `include` is scoped to
+`app/**/*.test.jsx` so it never picks up the `node:test` files.
+
+`scripts/score-fixtures.expected.json` pins whole-player totals across risky states and is the gate
+for any scoring refactor — it stayed green through the entire framework migration, which is how we
+know scoring never drifted. **When you change a scoring rule on purpose, regenerate it deliberately**
+(`node scripts/score-fixtures.mjs > …`) and say so; never regenerate it to make a red check go green.
 
 ### The ledger (`schema.sql`, `api/*`)
 
 A saved game is a **session**, not a row per player — `sessions` + `session_players` (+ `people`,
 `session_photos`). `session_players.detail` holds the **raw entered state** from `scorer.detail(p)`,
 never derived points, and `total_score` is authoritative and never recomputed from it.
+
+Raw entered state includes **typed whole-category totals**, stored under the reserved `_totals` key
+— they are what the human typed, and they are not recoverable from the tally fields. `scorer.
+fromDetail(blob)` reads a row back and returns `{ player, present }`; every category declaring
+`detail` must declare `restore(p, d)` as its inverse. **Never hand-roll that inverse in a view** —
+`p[cat.key] = d` is wrong for Harmonies' `water` and Faraway's `region` and fails silently.
 
 **Read [docs/ledger.md](docs/ledger.md) before touching `schema.sql`, `api/*`, or anything that
 writes a score.**
@@ -92,10 +127,16 @@ writes a score.**
 
 A game is a **declaration**, not code. Write `src/games/<game>.js` following the contract in
 [src/games/harmonies.js](src/games/harmonies.js)'s header comment, register it in
-`src/games/index.js`, and add its key to `GAMES` in [lib/db.mjs](lib/db.mjs). Nothing in
-`index.html` should need a new branch. **If you find yourself adding `if (game.key === …)` to the
-render/patch/wire code, the descriptor contract is missing a field — add the field instead.** That
-branching is exactly how Faraway became a second copy of the whole scorer.
+`src/games/index.js`, and add its key to `GAMES` in [lib/db.mjs](lib/db.mjs). No component should
+need a new branch. **If you find yourself adding `if (game.key === …)` to a component, the
+descriptor contract is missing a field — add the field instead.** That branching is exactly how
+Faraway became a second copy of the whole scorer.
+
+**`controls(p, variant)` returns control SPECS — plain data, never markup.** An array of
+`tallyGroup` / `ladder` / `list` / `num` objects (built by the helpers in `src/ui/controls.js`),
+which `app/_components/Controls.jsx` renders. Descriptors emitting HTML was the one place a game
+declaration carried view concerns, and the single thing that would have made a re-port a rewrite
+rather than a view-layer swap. A descriptor must not import React.
 
 A category can score below zero (7 Wonders' military: -1 per defeat token) by setting `min` on its
 descriptor (default 0) — it's the floor for both the rendered total `<input min>` and what
@@ -133,21 +174,25 @@ index arrived as `variant` and silently flipped river scoring to islands for eve
 first. Write `players.map(p => scorer.total(p))`. A wrong score doesn't throw — it prints a
 plausible wrong number nobody re-checks.
 
-### Every rendered number needs a patch hook
+### Patch hooks are gone — and what replaced them
 
-Taps call `patchScores()`, not `render()`, so **any number in the markup that isn't wired to a
-`data-pts-for` / `data-sum` / `data-count-for` / `data-work-for` hook will silently freeze at its
-initial value.** This has already shipped once: Faraway's `.cat-pts` was rendered without
-`data-pts-for`, so its per-category scores sat at 0 while the total updated correctly.
-`src/ui/card.test.js` asserts every score-bearing element in every game's markup carries a hook —
-keep it passing rather than deleting the assertion.
+The vanilla app updated numbers in place via `patchScores()`, so any number not wired to a
+`data-pts-for`/`data-sum`/`data-count-for`/`data-work-for` hook silently froze at its initial value.
+That shipped once, as Faraway's `.cat-pts` sitting at 0 while the total updated correctly.
 
-The test does this two ways, and both are load-bearing. It renders each category twice (an
-all-zero player and a fully-populated one) and requires that **anything whose text differs between
-the two renders sits under a hook** — which automatically ignores static rule constants like the
-1/3/7 token pips, since those read the same in both. That check is blind to elements which ship a
-constant placeholder and are only ever filled by `patchScores()` (the `=` strip, the total badge),
-so those are asserted structurally instead.
+**React removes the entire bug class**: every number is computed from `scorer` during render, and
+there is no second update path that could fail to run. The hooks and `patchScores()` are deleted.
+
+What was lost with them is the *assertion*: `card.test.js` proved a hook existed. The replacement
+proves more — component tests render a category, simulate a real interaction, and assert the
+rendered category score and total **actually change**. Keep those tests honest; they are the only
+thing standing between a refactor and a silently frozen number.
+
+**One thing is deliberately still injected as a string:** a tally button's contents (token art plus
+its rule pip) are static for a given category, so `Controls.jsx` sets them once via
+`dangerouslySetInnerHTML`. That keeps the button *element* stable across taps, which is what
+preserves `:active` under a moving finger — the reason `patchScores()` existed in the first place.
+Rebuild that node per render and the tap-fast feel goes with it.
 
 ### Showing the working
 
@@ -169,30 +214,28 @@ For fields, buildings, islands and river a typed total is *inverted back* into t
 `scorer.infer()` and the category returns to tally mode. Stacks and animal cards are ambiguous
 (13 could be many bucket combinations) so they keep the override.
 
+**A kept override is invisible to the tally fields, so it has to be saved separately.** Every
+7 Wonders category and both Faraway categories are `infer: null`, so typing a total there is not an
+edge case — on the formula categories (science, treasury) it is the fast way to score. That is why
+`scorer.detail()` emits `_totals`; see [docs/ledger.md](docs/ledger.md).
+
 ### Rendering
 
-- The player-card markup itself — `categoryBlock()`, `catBody()`, `playerCardBody()`, `sumStrip()`
-  — lives in [src/ui/card.js](src/ui/card.js) as pure functions (game/scorer/player/opts in,
-  HTML string out). [src/ui/scorer.js](src/ui/scorer.js) creates the DOM node, sets `innerHTML`
-  from these, and wires it (`wireCard()`) — nothing that touches `document` lives in `card.js`.
-  Keeping that line sharp is what lets the markup be tested at all.
-- `render()` rebuilds the container; use it only for **structural** change (add/remove player,
-  add/remove animal card, open/close a drawer, mode or water-side switch).
-- `patchScores()` updates numbers **in place** and is what every tap calls. Taps arrive fast; a
-  full rebuild per tap loses `:active` and gets sluggish with four players.
-- Patch hooks — keep these intact when editing markup: `data-pid` on each player container,
-  `data-pts-for`, `data-count-for`, `data-minus-for`, `data-sum`, `.total-badge`, `.crown`,
-  `.ladder [data-rung]`.
-- Two modes share one `players` array: `renderByPlayer()` (accordion cards) and
-  `renderByCategory()` (tab strip + `reviewGrid()`). Both the card-sum strip and `reviewGrid()`'s
-  sub-columns are generated from `game.sums` in full — one column per declared group, never
-  hardcoded group keys. A group name that doesn't match a hardcoded column used to render a
-  literal "undefined" (`patchScores()` does `b[el.dataset.sum]`); driving both off `game.sums`
-  is what closed that.
-- `waterSide` is per-game state (in `gameState`, mirrored to the module-level `waterSide` the same
-  way `scoreMode` is), not a bare global — a second game with its own variant toggle can't collide
-  with Harmonies' River/Islands state. `selectGame()` resyncs both `#modeToggle` and `#waterToggle`
-  button `.active` classes from the restored state.
+- `Card.jsx` holds the player card (`CatBody`, `CategoryBlock`, `SumStrip`, `PlayerCard`);
+  `Scorer.jsx` holds the two render modes, the category tab strip and the review grid. Both read
+  every number from `scorer` during render — there is no separate update path.
+- Two modes share one `players` array: stacked player cards, and the by-category tab strip. Both
+  the card `=` strip and the review grid's sub-columns are generated from `game.sums` in full —
+  one column per declared group, **never hardcoded group keys.** Hardcoding two columns is what
+  once dropped Harmonies' third group ("spirit") entirely and rendered a literal "undefined" for
+  any group that didn't match.
+- The class names and the five `.view` container ids are unchanged from the vanilla markup, because
+  `styles.css` keys off them — including `#view-scorer[data-game="7wonders"]`, which is how a game
+  restyles its own pips. Renaming one silently unstyles a screen.
+- **The settings bar is hidden outright when a game has neither toggle** (Faraway), rather than
+  left as a bar containing one lone button.
+- `waterSide` is per-game state, so a second game with its own variant toggle cannot collide with
+  Harmonies' River/Islands state.
 
 ## Design rules that are load-bearing
 
@@ -242,14 +285,29 @@ descriptor. Its counts still never go negative; you tally 3 defeats, and the des
 ## Running it
 
 ```bash
-vercel dev --yes --listen 3000
+npm run dev
 ```
 
 Prefer the Browser pane (`.claude/launch.json`, config `harmonies-counter`) over Bash for this.
-`/api/*` returns 500 in **local** `vercel dev` — there's no local `DATABASE_URL`
-(`node_modules` used to be missing too; it's installed now for the tests). Both
-have a working DB (see Deploying below). Don't spend time trying to fix the DB locally; deploy to
-staging instead if you need to verify a DB-backed flow (save game, leaderboard, history).
+
+**`.env.local` has a working `DATABASE_URL`, so DB-backed flows DO run locally** — save game,
+leaderboard, history and session reads all work against the real database. (This file used to say
+they returned 500 locally; that stopped being true once the variable was added to the Development
+environment, and it went unnoticed because nothing re-checked it.)
+
+⚠️ **That local database is the production one.** Preview, production and your laptop all share it
+by decision (docs/deploying.md), so a local save writes rows your friends will see. Testing the save
+flow is fine; leaving the rows behind is not:
+
+```bash
+node --env-file=.env.local scripts/sessions.mjs                # list saved sessions
+node --env-file=.env.local scripts/sessions.mjs <public_id>    # one session, detail and all
+node --env-file=.env.local scripts/sessions.mjs --delete <id>  # remove it again
+node --env-file=.env.local scripts/sessions.mjs --prune-people # drop people left with no games
+```
+
+`scripts/inspect-db.mjs` prints table row counts — the cheapest way to find out what you are
+pointed at before doing anything destructive.
 
 Verify UI changes in the browser rather than by inspection, and check **both themes at 375px and
 320px**. The settings bar shrinks via a `max-width: 372px` media query that must stay *after* the

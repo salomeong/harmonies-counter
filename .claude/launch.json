@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "harmonies-counter",
-      "runtimeExecutable": "vercel",
-      "runtimeArgs": ["dev", "--yes", "--listen", "3000"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
       "port": 3000
     }
   ]

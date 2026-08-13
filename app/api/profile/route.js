@@ -4,24 +4,28 @@
 // 404 when the person has never played that game — either they don't exist at all (no `people`
 // row for that name_key), or they exist (they've played some OTHER game) but have no
 // session_players rows for THIS game_key. Both cases collapse to the same 404, same as before.
-import { getSql, normalizeName, normalizeGame } from '../lib/db.mjs';
+import { NextResponse } from 'next/server';
+import { getSql, normalizeName, normalizeGame } from '../../../lib/db.mjs';
 
-export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'method_not_allowed' });
-    return;
-  }
+// This route reads process.env.DATABASE_URL through the lazy getSql() below — force-dynamic keeps
+// Next from trying to evaluate (and cache) it at `next build` time, when there is no database.
+export const dynamic = 'force-dynamic';
 
-  const key = normalizeName(req.query.name);
+// Method routing (GET vs everything else) is now handled by App Router itself — a request with any
+// other method gets Next's automatic 405 response, so the manual `req.method !== 'GET'` check that
+// used to open this handler is gone.
+
+export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+
+  const key = normalizeName(searchParams.get('name'));
   if (!key) {
-    res.status(400).json({ error: 'missing_name' });
-    return;
+    return NextResponse.json({ error: 'missing_name' }, { status: 400 });
   }
 
-  const game = normalizeGame(req.query.game);
+  const game = normalizeGame(searchParams.get('game'));
   if (!game) {
-    res.status(400).json({ error: 'invalid_game' });
-    return;
+    return NextResponse.json({ error: 'invalid_game' }, { status: 400 });
   }
 
   try {
@@ -31,8 +35,7 @@ export default async function handler(req, res) {
     `;
     const person = people[0];
     if (!person) {
-      res.status(404).json({ error: 'not_found' });
-      return;
+      return NextResponse.json({ error: 'not_found' }, { status: 404 });
     }
 
     const games = await sql`
@@ -43,22 +46,20 @@ export default async function handler(req, res) {
       ORDER BY s.played_at DESC
     `;
     if (!games.length) {
-      res.status(404).json({ error: 'not_found' });
-      return;
+      return NextResponse.json({ error: 'not_found' }, { status: 404 });
     }
 
     const scored = games.map(g => g.total).filter(t => t != null);
     const highScore = scored.length ? Math.max(...scored) : null;
 
-    res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({
+    return NextResponse.json({
       key,
       displayName: person.displayName,
       highScore,
       games,
-    });
+    }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     console.error('GET /api/profile failed:', err);
-    res.status(500).json({ error: 'server_error' });
+    return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }
 }

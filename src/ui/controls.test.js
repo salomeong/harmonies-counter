@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { riverPoints } from '../scoring.js';
 import {
   TOK_RX, TOK_RY, escapeAttr, getCount, setCount, bumpCount, tallyControl, riverLadder, tokenArt,
   numberList, numField
@@ -79,22 +80,43 @@ test('bumpCount: truncates the current value before adding', () => {
 });
 
 // ---- tallyControl ----
+//
+// tallyControl() used to build an HTML string; it now builds a plain spec object that
+// app/_components/Controls.jsx's <Tally> renders. These tests assert the DATA the spec carries —
+// the actual rendering (does the minus end up `disabled`, does a pip vs a cap actually show up in
+// the DOM) is proven at the component level in app/_components/Card.test.jsx, which is the piece
+// that would catch a renderer regression these object-shape tests cannot.
 
-test('tallyControl: markup contains the expected data-* hooks', () => {
-  const html = tallyControl({
+test('tallyControl: maps every input field onto the spec unchanged, tagged with type "tally"', () => {
+  const spec = tallyControl({
     scoreCat: 'fields', path: 'fields', key: '', art: 'field', prefix: '×', min: 0,
     pip: 5, count: 2, label: 'Add a field'
   });
-  assert.match(html, /data-role="tally"/);
-  assert.match(html, /data-path="fields"/);
-  assert.match(html, /data-key=""/);
-  assert.match(html, /data-min="0"/);
-  assert.match(html, /data-score-cat="fields"/);
-  assert.match(html, /data-count-for="fields:"/);
-  assert.match(html, /data-minus-for="fields:"/);
+  assert.deepEqual(spec, {
+    type: 'tally', scoreCat: 'fields', path: 'fields', key: '', art: 'field',
+    height: 1, pip: 5, cap: undefined, prefix: '×', min: 0, count: 2, label: 'Add a field'
+  });
 });
 
-test('tallyControl: the minus button is disabled when count <= min, not otherwise', () => {
+test('tallyControl: key defaults to "" and height defaults to 1 when omitted', () => {
+  const spec = tallyControl({
+    scoreCat: 'water', path: 'river', art: 'water', prefix: 'len ', min: 0,
+    cap: '+1 tile', count: 0, label: 'Extend the river by one token'
+  });
+  assert.equal(spec.key, '');
+  assert.equal(spec.height, 1);
+});
+
+test('tallyControl: key and height pass through when supplied (a stack bucket)', () => {
+  const spec = tallyControl({
+    scoreCat: 'trees', path: 'trees', key: 'h2', art: 'tree', height: 2, prefix: '×', min: 0,
+    pip: 3, count: 1, label: 'Add a height-2 tree, 3 points'
+  });
+  assert.equal(spec.key, 'h2');
+  assert.equal(spec.height, 2);
+});
+
+test('tallyControl: count and min ride along together so the renderer can decide the minus is disabled at the floor, not otherwise', () => {
   const atMin = tallyControl({
     scoreCat: 'fields', path: 'fields', key: '', art: 'field', prefix: '×', min: 0,
     pip: 5, count: 0, label: 'Add a field'
@@ -103,64 +125,73 @@ test('tallyControl: the minus button is disabled when count <= min, not otherwis
     scoreCat: 'fields', path: 'fields', key: '', art: 'field', prefix: '×', min: 0,
     pip: 5, count: 1, label: 'Add a field'
   });
-  const minusAtMin = atMin.match(/<button class="minus"[^>]*>/)[0];
-  const minusAboveMin = aboveMin.match(/<button class="minus"[^>]*>/)[0];
-  assert.match(minusAtMin, /disabled/);
-  assert.doesNotMatch(minusAboveMin, /disabled/);
+  assert.equal(atMin.count, 0);
+  assert.equal(atMin.min, 0);
+  assert.ok(atMin.count <= atMin.min, 'at the floor, count <= min — the renderer disables the minus');
+  assert.ok(aboveMin.count > aboveMin.min, 'above the floor, count > min — the renderer enables the minus');
 });
 
-test('tallyControl: renders a pip when o.pip != null, including pip: 0', () => {
+test('tallyControl: pip rides along as-is, including pip: 0, which must stay distinguishable from "no pip"', () => {
   const withPip = tallyControl({
     scoreCat: 'fields', path: 'fields', key: '', art: 'field', prefix: '×', min: 0,
     pip: 5, count: 1, label: 'x'
   });
-  assert.match(withPip, /<span class="pip">5<\/span>/);
+  assert.equal(withPip.pip, 5);
+  assert.equal(withPip.cap, undefined);
 
   const withZeroPip = tallyControl({
     scoreCat: 'fields', path: 'fields', key: '', art: 'field', prefix: '×', min: 0,
     pip: 0, count: 1, label: 'x'
   });
-  assert.match(withZeroPip, /<span class="pip">0<\/span>/, 'pip: 0 must render as a pip, not a cap — 0 != null is true');
-  assert.doesNotMatch(withZeroPip, /tally-cap/);
+  assert.equal(withZeroPip.pip, 0);
+  assert.notEqual(withZeroPip.pip, null, 'pip: 0 must not collapse to null — the renderer tests `!= null`, and 0 != null is true');
 });
 
-test('tallyControl: renders tally-cap when o.pip is null', () => {
-  const html = tallyControl({
+test('tallyControl: cap rides along as-is when pip is null (an ambiguous points-per-tap category)', () => {
+  const spec = tallyControl({
     scoreCat: 'animals', path: 'animals', key: '0', art: 'brown', prefix: '×', min: 0,
     pip: null, cap: '?', count: 1, label: 'x'
   });
-  assert.match(html, /<span class="tally-cap">\?<\/span>/);
-  assert.doesNotMatch(html, /class="pip"/);
+  assert.equal(spec.pip, null);
+  assert.equal(spec.cap, '?');
+});
+
+// ---- tallyGroup ----
+
+test('tallyGroup: wraps items as {type: "tallyGroup", items}', () => {
+  const a = tallyControl({ scoreCat: 'x', path: 'x', art: 'x', prefix: '×', min: 0, pip: 1, count: 0, label: 'a' });
+  const b = tallyControl({ scoreCat: 'x', path: 'x', art: 'x', prefix: '×', min: 0, pip: 3, count: 0, label: 'b' });
+  const spec = { type: 'tallyGroup', items: [a, b] };
+  assert.deepEqual(spec.items, [a, b]);
 });
 
 // ---- riverLadder ----
+//
+// riverLadder() no longer takes `p` and no longer decides which rung is "on" — the water
+// descriptor's activeRung(p, variant) is the single source of that (src/games/harmonies.js), and
+// the <Ladder> component in app/_components/Controls.jsx reads it separately. So there is nothing
+// left here to test per river-length; what's tested is that the printed ladder itself (values,
+// text) is built correctly and carries no lit/active state of its own. The "exactly one rung is
+// lit, matching the river length" behaviour this used to assert is now a component-level test in
+// app/_components/Card.test.jsx.
 
-test('riverLadder: exactly one rung is "on" for lengths 1-6, matching the length', () => {
-  for (let len = 1; len <= 6; len++){
-    const html = riverLadder({ river: len });
-    const onMatches = html.match(/class="rung on"/g) || [];
-    assert.equal(onMatches.length, 1, `length ${len} should light exactly one rung`);
-    // the lit rung is the one whose data-rung matches len
-    const litRungMatch = html.match(/<span class="rung on" data-rung="(\d+)">/);
-    assert.ok(litRungMatch, 'a lit rung should be found');
-    assert.equal(Number(litRungMatch[1]), len);
-  }
+test('riverLadder: returns exactly 7 rungs, valued 1 through 7, regardless of any player state', () => {
+  const spec = riverLadder();
+  assert.equal(spec.type, 'ladder');
+  assert.deepEqual(spec.rungs.map(r => r.value), [1, 2, 3, 4, 5, 6, 7]);
 });
 
-test('riverLadder: length >= 7 lights the "7" (+4) rung', () => {
-  for (const len of [7, 8, 20]){
-    const html = riverLadder({ river: len });
-    const onMatches = html.match(/class="rung on"/g) || [];
-    assert.equal(onMatches.length, 1);
-    const litRungMatch = html.match(/<span class="rung on" data-rung="(\d+)">/);
-    assert.equal(Number(litRungMatch[1]), 7);
+test('riverLadder: rung text matches riverPoints() for lengths 1-6, and the last rung reads "+4" (standing for "7 or more")', () => {
+  const spec = riverLadder();
+  for (const r of spec.rungs){
+    if (r.value <= 6) assert.equal(r.text, String(riverPoints(r.value)), `rung ${r.value}`);
   }
+  assert.equal(spec.rungs[6].text, '+4');
 });
 
-test('riverLadder: length 0 lights no rung', () => {
-  const html = riverLadder({ river: 0 });
-  const onMatches = html.match(/class="rung on"/g) || [];
-  assert.equal(onMatches.length, 0);
+test('riverLadder: the spec carries no notion of which rung is active — that lives on the water descriptor, not here', () => {
+  const spec = riverLadder();
+  for (const r of spec.rungs) assert.ok(!('on' in r) && !('active' in r));
 });
 
 // ---- tokenArt ----
@@ -196,25 +227,42 @@ test('tokenArt: uses the exported TOK_RY for the disc ellipse', () => {
   assert.match(html, new RegExp(`ry="${TOK_RY}"`));
 });
 
-// ---- numberList / numField min option (Fix 1: negative-scoring categories) ----
+// ---- numberList / numField ----
 
-test('numberList: min defaults to 0 when not passed, same as before this option existed', () => {
-  const html = numberList({ playerId: 1, cat: 'animals', values: [0], addLabel: '+ Add' });
-  assert.match(html, /min="0"/);
+test('numberList: min defaults to 0 on the spec when not passed', () => {
+  const spec = numberList({ playerId: 1, cat: 'animals', values: [0], addLabel: '+ Add' });
+  assert.equal(spec.min, 0);
 });
 
-test('numberList: a passed min overrides the default on every row', () => {
-  const html = numberList({ playerId: 1, cat: 'military', values: [0, -3], addLabel: '+ Add', min: -99 });
-  const mins = html.match(/min="-99"/g) || [];
-  assert.equal(mins.length, 2, 'every row input should carry the custom min');
+test('numberList: a passed min rides onto the spec as one value — the renderer applies it to every row\'s <input min>', () => {
+  const spec = numberList({ playerId: 1, cat: 'military', values: [0, -3], addLabel: '+ Add', min: -99 });
+  assert.equal(spec.min, -99);
+  assert.equal(spec.values.length, 2);
+});
+
+test('numberList: showRemove is true only past the first row (a restored single-row list can never reach the remove button)', () => {
+  assert.equal(numberList({ playerId: 1, cat: 'animals', values: [0], addLabel: '+' }).showRemove, false);
+  assert.equal(numberList({ playerId: 1, cat: 'animals', values: [0, 1], addLabel: '+' }).showRemove, true);
+});
+
+test('numberList: uidFor composes uidPrefix, playerId, cat and index — what the renderer sets as data-uid', () => {
+  const spec = numberList({ playerId: 2, cat: 'wonders', values: [0, 0], uidPrefix: '7w-', addLabel: '+' });
+  assert.equal(spec.uidFor(0), '7w-p2-wonders-0');
+  assert.equal(spec.uidFor(1), '7w-p2-wonders-1');
 });
 
 test('numField: min defaults to 0 when not passed', () => {
-  const html = numField(1, 'bonus', 0, 'extra points');
-  assert.match(html, /min="0"/);
+  const spec = numField(1, 'bonus', 0, 'extra points');
+  assert.equal(spec.min, 0);
 });
 
 test('numField: a passed min overrides the default', () => {
-  const html = numField(1, 'military', -5, 'defeat tokens', -99);
-  assert.match(html, /min="-99"/);
+  const spec = numField(1, 'military', -5, 'defeat tokens', -99);
+  assert.equal(spec.min, -99);
+});
+
+test('numField: subrow is always true and uid composes playerId + cat', () => {
+  const spec = numField(3, 'bonus', 7, 'extra points');
+  assert.equal(spec.subrow, true);
+  assert.equal(spec.uid, 'p3-bonus');
 });

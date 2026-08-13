@@ -40,6 +40,13 @@ you overwrite — `scripts/inspect-db.mjs` prints the tables and row counts of w
 `DATABASE_URL` currently points at, which is the cheapest way to find out you are aimed at
 production.
 
+**`.env.local` currently has a working `DATABASE_URL`, pointing at the production database.** Since
+the variable was added to the Development environment (see the note below), DB-backed flows run
+locally — save game, leaderboard, history, session reads. CLAUDE.md claimed for a while that they
+returned 500 locally; that was stale and nobody re-checked. Treat your laptop as a third environment
+writing to the same rows: `scripts/sessions.mjs` lists, shows and deletes sessions by `public_id`,
+and `--prune-people` clears people left with no games.
+
 **`vercel env pull` returns Production/Preview values as empty strings.** Vercel marks them
 *sensitive* by default (hence `vercel env add --no-sensitive`, "opt out of the sensitive default on
 Production and Preview"), which makes them write-only — `env pull` yields `DATABASE_URL=""` rather

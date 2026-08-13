@@ -2,18 +2,23 @@
 // order, with their per-category detail. This is the read side of the atomic write in
 // api/save-game.js — the endpoint a future session-detail/recap view (not built here, see
 // CLAUDE.md) will hang off of.
-import { getSql } from '../lib/db.mjs';
+import { NextResponse } from 'next/server';
+import { getSql } from '../../../lib/db.mjs';
 
-export default async function handler(req, res) {
-  if (req.method !== 'GET') {
-    res.status(405).json({ error: 'method_not_allowed' });
-    return;
-  }
+// This route reads process.env.DATABASE_URL through the lazy getSql() below — force-dynamic keeps
+// Next from trying to evaluate (and cache) it at `next build` time, when there is no database.
+export const dynamic = 'force-dynamic';
 
-  const publicId = typeof req.query.id === 'string' ? req.query.id.trim() : '';
+// Method routing (GET vs everything else) is now handled by App Router itself — a request with any
+// other method gets Next's automatic 405 response, so the manual `req.method !== 'GET'` check that
+// used to open this handler is gone.
+
+export async function GET(request) {
+  const { searchParams } = new URL(request.url);
+  const idParam = searchParams.get('id');
+  const publicId = typeof idParam === 'string' ? idParam.trim() : '';
   if (!publicId) {
-    res.status(400).json({ error: 'missing_id' });
-    return;
+    return NextResponse.json({ error: 'missing_id' }, { status: 400 });
   }
 
   try {
@@ -25,8 +30,7 @@ export default async function handler(req, res) {
     `;
     const session = sessions[0];
     if (!session) {
-      res.status(404).json({ error: 'not_found' });
-      return;
+      return NextResponse.json({ error: 'not_found' }, { status: 404 });
     }
 
     const players = await sql`
@@ -37,17 +41,16 @@ export default async function handler(req, res) {
       ORDER BY seat ASC
     `;
 
-    res.setHeader('Cache-Control', 'no-store');
-    res.status(200).json({
+    return NextResponse.json({
       publicId: session.publicId,
       gameKey: session.gameKey,
       playedAt: session.playedAt,
       endedBy: session.endedBy,
       variant: session.variant,
       players,
-    });
+    }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     console.error('GET /api/session failed:', err);
-    res.status(500).json({ error: 'server_error' });
+    return NextResponse.json({ error: 'server_error' }, { status: 500 });
   }
 }

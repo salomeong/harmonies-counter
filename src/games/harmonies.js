@@ -19,7 +19,18 @@
 //   controls (p, variant) => string   the tally/entry HTML for this category
 //   detail   (p) => any   raw entered state for the ledger. Raw, NOT derived points: "science: 21"
 //                     cannot reconstruct "3 tablets, 2 compasses, 1 gear".
+//   restore  (p, d) => void   the DECLARED INVERSE of `detail`. Writes the blob `d` back onto a
+//                     fresh player so a saved game can be re-scored and shown. Required wherever
+//                     `detail` is declared (registry.test.js asserts the pair), and deliberately
+//                     NOT defaulted to a generic `p[key] = d`: harmonies' water writes two
+//                     top-level fields (river/islands) under one detail key, and Faraway's
+//                     fameCat's key ("region") differs from its field ("regionFame"), so a
+//                     generic inverse would silently restore neither. Must tolerate a malformed
+//                     or missing blob rather than throw — it is reading data from Postgres.
+//                     Typed whole-category overrides ride along separately under the reserved
+//                     `_totals` key, handled by scorer.fromDetail(), not by any restore().
 //
+
 //   infer    null | ((p, total, variant) => boolean)
 //                     The FIELD is either a function or the literal null — it is not a function
 //                     that may return null. A function inverts a typed total back into a count,
@@ -39,6 +50,11 @@
 //                     represents this category" and are NOT interchangeable: `icon` is bare text
 //                     sized for a table header, `art` is a kind name fed to tokenArt() for a 34px
 //                     drawn sprite. A category can set one, the other, both, or neither.
+//   work     (p, variant) => string   HTML "showing the working" under the controls, rebuilt on
+//                     every patch inside `data-work-for`. This is where the app stops being a
+//                     calculator and becomes checkable: 7 Wonders' science renders `3² 9 · 2² 4 ·
+//                     1² 1` then `1 set × 7`, so 21 is something you can verify rather than
+//                     believe. Pure like everything else here, so a recap can call it too.
 //   activeRung (p, variant) => number   which ladder rung is lit, when `controls` draws a ladder
 //   canType  boolean   default true; false hides "✎ Enter total" (bonus is already a bare number)
 //   listField  string   name of the player array a repeatable list (`numberList()`) writes to,
@@ -57,7 +73,7 @@
 // partition `cats` exactly once each — there is a test asserting that.
 
 import { numOf, stackPoints, riverPoints, animalPoints } from "../scoring.js";
-import { tallyControl, riverLadder, numField, numberList, escapeAttr } from "../ui/controls.js";
+import { tallyControl, tallyGroup, riverLadder, numField, numberList } from "../ui/controls.js";
 
 export const STACK_PTS = { h1: 1, h2: 3, h3: 7 };
 
@@ -75,15 +91,19 @@ function stackCat({ key, label, hint, dot, icon, art, noun }){
     key, label, hint, dot, icon, art,
     init: () => ({ [key]: { h1: 0, h2: 0, h3: 0 } }),
     points: p => stackPoints(p[key]),
-    controls: p => `<div class="tally-group">${STACK_KEYS.map(s => tallyControl({
+    controls: p => [tallyGroup(STACK_KEYS.map(s => tallyControl({
       scoreCat: key, path: key, key: s.key, art, height: s.height, prefix: "×", min: 0,
       pip: s.pts,
       count: numOf(p[key][s.key]),
       label: `Add a height-${s.height} ${noun}, ${s.pts} point${s.pts === 1 ? "" : "s"}`
-    })).join("")}</div>`,
+    })))],
     // A stack total is ambiguous — 13 could be many bucket combinations — so it keeps the override.
     infer: null,
-    detail: p => ({ ...p[key] })
+    detail: p => ({ ...p[key] }),
+    restore: (p, d) => {
+      const b = d && typeof d === "object" ? d : {};
+      p[key] = { h1: numOf(b.h1), h2: numOf(b.h2), h3: numOf(b.h3) };
+    }
   };
 }
 
@@ -117,17 +137,20 @@ const water = {
 
   controls: (p, v) => {
     if (v && v.waterSide === "island"){
-      return `<div class="tally-group">${tallyControl({
+      return [tallyGroup([tallyControl({
         scoreCat: "water", path: "islands", key: "", art: "water", prefix: "×", min: 1,
         pip: 5,
         count: Math.max(1, numOf(p.islands)), label: "Add an island, 5 points"
-      })}</div>`;
+      })])];
     }
-    return `<div class="tally-group">${tallyControl({
-      scoreCat: "water", path: "river", key: "", art: "water", prefix: "len ", min: 0,
-      cap: "+1 tile",
-      count: numOf(p.river), label: "Extend the river by one token"
-    })}</div>${riverLadder(p)}`;
+    return [
+      tallyGroup([tallyControl({
+        scoreCat: "water", path: "river", key: "", art: "water", prefix: "len ", min: 0,
+        cap: "+1 tile",
+        count: numOf(p.river), label: "Extend the river by one token"
+      })]),
+      riverLadder()
+    ];
   },
 
   infer: (p, total, v) => {
@@ -148,7 +171,18 @@ const water = {
     return len >= 7 ? 7 : len;
   },
 
-  detail: p => ({ river: numOf(p.river), islands: numOf(p.islands) })
+  detail: p => ({ river: numOf(p.river), islands: numOf(p.islands) }),
+
+  // Water is exactly why `restore` has to be declared rather than derived: its detail key is
+  // "water" but it owns two TOP-LEVEL player fields, so the obvious generic inverse
+  // (`p[cat.key] = d`) would write a useless `p.water` and leave river/islands at their init
+  // values — scoring every restored board as a length-0 river. Both sides are always restored
+  // regardless of the active variant, matching what detail() always writes.
+  restore: (p, d) => {
+    const b = d && typeof d === "object" ? d : {};
+    p.river = numOf(b.river);
+    p.islands = numOf(b.islands);
+  }
 };
 
 // Fields and buildings are the same shape: a single ×5 tally whose typed total is unambiguous
@@ -159,17 +193,18 @@ function countCat({ key, label, hint, dot, icon, art, noun }){
     key, label, hint, dot, icon, art,
     init: () => ({ [key]: 0 }),
     points: p => numOf(p[key]) * 5,
-    controls: p => `<div class="tally-group">${tallyControl({
+    controls: p => [tallyGroup([tallyControl({
       scoreCat: key, path: key, key: "", art, prefix: "×", min: 0,
       pip: 5,
       count: numOf(p[key]), label: `Add a ${noun}, 5 points`
-    })}</div>`,
+    })])],
     infer: (p, total) => {
       if (total % 5) return false;
       p[key] = total / 5;
       return true;
     },
-    detail: p => numOf(p[key])
+    detail: p => numOf(p[key]),
+    restore: (p, d) => { p[key] = numOf(d); }
   };
 }
 
@@ -196,14 +231,15 @@ const animals = {
   listField: "animals",
   init: () => ({ animals: [0] }),
   points: p => animalPoints(p),
-  controls: p => numberList({
+  controls: p => [numberList({
     playerId: p.id, cat: "animals", values: p.animals, uidPrefix: "",
     inputClass: "num-input", inputmode: "numeric",
     removeAriaLabel: "Remove this card",
     addLabel: "+ Add card"
-  }),
+  })],
   infer: null,
-  detail: p => p.animals.map(numOf)
+  detail: p => p.animals.map(numOf),
+  restore: (p, d) => { p.animals = Array.isArray(d) ? d.map(numOf) : []; }
 };
 
 // Nature Spirit / bonus is already a bare number — there is no tally to invert a typed total
@@ -219,16 +255,17 @@ const bonus = {
   valueField: "bonus",
   init: () => ({ bonus: 0 }),
   points: p => numOf(p.bonus),
-  controls: p => `<div class="subrow">${numField(p.id, "bonus", p.bonus, "extra points")}</div>`,
+  controls: p => [numField(p.id, "bonus", p.bonus, "extra points")],
   infer: null,
-  detail: p => numOf(p.bonus)
+  detail: p => numOf(p.bonus),
+  restore: (p, d) => { p.bonus = numOf(d); }
 };
 
 export const harmonies = {
   key: "harmonies",
   label: "Harmonies",
-  logo: "assets/logo.png",
-  tileArt: "assets/harmonies-tile-art.jpg",
+  logo: "/assets/logo.png",
+  tileArt: "/assets/harmonies-tile-art.jpg",
   tagline: "Build landscapes, settle animals",
   subtitle: "End-of-game tally",
   minPlayers: 1,

@@ -3,6 +3,11 @@ node_modules/
 .env*.local
 .DS_Store
 
+# Next.js build output
+.next/
+out/
+next-env.d.ts
+
 # Reference-only source material (press kit, rulebook, review images) --
 # not part of the deployed site, kept locally for design reference only.
 EN LITE/

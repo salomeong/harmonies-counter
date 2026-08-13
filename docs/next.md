@@ -61,13 +61,18 @@ photos inside Blob's Hobby allowance.
 Head-to-head records, win rates, "your best science score", how a game went. Needs the session view
 first.
 
-**This is the piece that trips the framework trigger, so decide it deliberately rather than
-drifting into it.** CLAUDE.md's stated condition for adopting Next.js + TanStack Query is *≥3
-data-driven routes beyond the scorer, or the first chart, or wanting TypeScript* — and session
-view + recaps is two new routes plus charts. Make the call up front, in writing, at the start of
-that work. Both answers are defensible; discovering the question halfway through a build is not.
-Note the trap CLAUDE.md already flags: running vanilla and React side by side is usually worse
-than either, so if the trigger fires, migrate wholesale rather than half.
+**Settled 2026-08-13: the app is now Next.js 16 + React 19 + TanStack Query.** See CLAUDE.md's
+"The framework decision" for what it bought and cost.
+
+Two corrections to what this file used to say here, since both misled once:
+
+- It claimed CLAUDE.md stated a trigger — *"≥3 data-driven routes beyond the scorer, or the first
+  chart, or wanting TypeScript"*. **CLAUDE.md never contained that rule.** A decision recorded in
+  the deferred-work file and attributed to the governing file is not a rule; it reads as one only
+  until someone greps. If a constraint is meant to bind, write it where it binds.
+- The migration was done **wholesale**, not side by side, and `src/` was kept framework-free so the
+  scoring core and all its tests carried through the port untouched. That is what made the
+  characterization gate meaningful evidence rather than decoration.
 
 ### 7 Wonders Duel
 Always exactly 2 players, so it wants a head-to-head two-column layout rather than stacked cards.
@@ -87,8 +92,11 @@ client, the validator and the insert before enabling them.
 - **Expansions.** 7 Wonders has Leaders and Cities; Cities adds black cards with *negative* VP,
   which the descriptor `min` field already supports. Faraway and Harmonies have their own. Each is
   additive: a category or two on an existing declaration.
-- **`escapeAttr` doesn't escape `>` or `'`.** Safe today — every call site interpolates into a
-  double-quoted attribute or text, and `<` and `"` are escaped — but the name promises more than it
-  does. Documented by tests in `src/ui/controls.test.js`.
-- **`reviewGrid()` is still hand-written in `src/ui/scorer.js`**, not moved to `card.js`, so it is
-  outside the patch-hook test's reach. Worth moving when it next needs changing.
+- ~~**`escapeAttr` doesn't escape `>` or `'`.**~~ Closed by the React port, which removed every
+  call site that could have cared: player names, labels and aria-labels are props now and React
+  escapes them itself. `escapeAttr` survives only inside the SVG token-art strings.
+- ~~**`reviewGrid()` is hand-written and outside the test's reach.**~~ It is a component in
+  `app/_components/Scorer.jsx` now, driven off `game.sums`.
+- **The local `.env.local` points at the production database.** Not a loose end so much as a
+  standing hazard: DB-backed flows now work locally (CLAUDE.md used to claim they 500'd), which
+  means a local save writes rows real people see. `scripts/sessions.mjs` lists and deletes them.

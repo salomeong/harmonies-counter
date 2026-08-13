@@ -1,0 +1,92 @@
+// Inspect or delete saved sessions, by public_id.
+//
+//   node --env-file=.env.local scripts/sessions.mjs                 # list every session
+//   node --env-file=.env.local scripts/sessions.mjs <public_id>     # one session in full
+//   node --env-file=.env.local scripts/sessions.mjs --delete <id>…  # delete sessions
+//
+// This exists because preview and production share one database by decision (docs/deploying.md),
+// so any end-to-end test of the save flow writes rows a real person will otherwise see. Writing
+// test games is fine; leaving them behind is not, and deleting them by hand in a SQL console is
+// how you delete the wrong one. `session_players` and `session_photos` cascade from `sessions`.
+//
+// A `people` row deliberately SURVIVES deletion of its sessions: `person_id` is ON DELETE SET NULL
+// and a person is not owned by any one game. Orphaned people are reported so you can see them,
+// not silently removed.
+
+import { neon } from '@neondatabase/serverless';
+
+if (!process.env.DATABASE_URL){
+  console.error('DATABASE_URL is not set. Run with: node --env-file=.env.local scripts/sessions.mjs');
+  process.exit(1);
+}
+const sql = neon(process.env.DATABASE_URL);
+
+const args = process.argv.slice(2);
+const deleting = args[0] === '--delete';
+const pruning = args[0] === '--prune-people';
+const ids = deleting ? args.slice(1) : args;
+
+if (deleting && !ids.length){
+  console.error('--delete needs at least one public_id.');
+  process.exit(1);
+}
+
+async function list(){
+  const rows = await sql`
+    SELECT s.public_id, s.game_key, s.ended_by, s.played_at,
+           count(sp.id) AS seats, max(sp.total_score) AS top
+    FROM sessions s LEFT JOIN session_players sp ON sp.session_id = s.id
+    GROUP BY s.id ORDER BY s.played_at DESC`;
+  if (!rows.length){ console.log('no sessions'); return; }
+  for (const r of rows){
+    console.log(`${r.public_id}  ${String(r.game_key).padEnd(10)} ${r.seats} seats  top ${r.top}  ${new Date(r.played_at).toISOString()}`);
+  }
+  console.log(`\n${rows.length} session(s)`);
+}
+
+async function show(publicId){
+  const [s] = await sql`SELECT id, public_id, game_key, ended_by, variant, played_at FROM sessions WHERE public_id = ${publicId}`;
+  if (!s){ console.log(`${publicId}: not found`); return; }
+  console.log(`\n${s.public_id}  ${s.game_key}  ended_by=${s.ended_by}  variant=${JSON.stringify(s.variant)}  ${new Date(s.played_at).toISOString()}`);
+  const players = await sql`
+    SELECT seat, display_name, total_score, is_winner, person_id, detail
+    FROM session_players WHERE session_id = ${s.id} ORDER BY seat`;
+  for (const p of players){
+    console.log(`  seat ${p.seat}  ${String(p.display_name).padEnd(16)} total=${p.total_score}  winner=${p.is_winner}  person_id=${p.person_id ?? 'guest'}`);
+    console.log(`      detail: ${JSON.stringify(p.detail)}`);
+  }
+  const photos = await sql`SELECT id, blob_url FROM session_photos WHERE session_id = ${s.id}`;
+  if (photos.length) console.log(`  photos: ${photos.map(p => p.blob_url).join(', ')}`);
+}
+
+async function remove(publicIds){
+  for (const publicId of publicIds){
+    const rows = await sql`DELETE FROM sessions WHERE public_id = ${publicId} RETURNING public_id`;
+    console.log(rows.length ? `deleted ${publicId} (session_players and session_photos cascaded)` : `${publicId}: not found`);
+  }
+  const orphans = await sql`
+    SELECT pe.name_key FROM people pe
+    LEFT JOIN session_players sp ON sp.person_id = pe.id
+    WHERE sp.id IS NULL`;
+  if (orphans.length){
+    console.log(`\nleft behind ${orphans.length} person row(s) with no sessions: ${orphans.map(o => o.name_key).join(', ')}`);
+    console.log('(person_id is ON DELETE SET NULL and a person is not owned by one game, so these are kept deliberately)');
+  }
+}
+
+// Separate and explicit, because deleting a person is not part of deleting a game they played.
+// Only ever removes people with no remaining seats anywhere, which is why it takes no arguments.
+async function prunePeople(){
+  const rows = await sql`
+    DELETE FROM people WHERE id IN (
+      SELECT pe.id FROM people pe
+      LEFT JOIN session_players sp ON sp.person_id = pe.id
+      WHERE sp.id IS NULL
+    ) RETURNING name_key`;
+  console.log(rows.length ? `pruned ${rows.length}: ${rows.map(r => r.name_key).join(', ')}` : 'no orphaned people');
+}
+
+if (deleting) await remove(ids);
+else if (pruning) await prunePeople();
+else if (ids.length) for (const id of ids) await show(id);
+else await list();

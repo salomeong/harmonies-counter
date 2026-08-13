@@ -8,7 +8,7 @@
 // players say "the red card" and "the purple card", so the swatch has to actually be that colour.
 
 import { numOf } from "../scoring.js";
-import { tallyControl, numberList } from "../ui/controls.js";
+import { tallyControl, tallyGroup, numberList } from "../ui/controls.js";
 import { cardArt, scienceArt, warTokenArt, defeatTokenArt, coinArt } from "../ui/art-7w.js";
 
 // ---- Military: four tallies, one of them worth NEGATIVE points ----
@@ -50,14 +50,14 @@ const military = {
   min: -6, // 3 ages × 2 neighbours, every conflict lost — the true floor, not an arbitrary guess
   init: () => ({ military: { w1: 0, w3: 0, w5: 0, loss: 0 } }),
   points: p => MILITARY_KEYS.reduce((sum, k) => sum + numOf(p.military[k.key]) * k.pts, 0),
-  controls: p => `<div class="tally-group">${MILITARY_KEYS.map(k => tallyControl({
+  controls: p => [tallyGroup(MILITARY_KEYS.map(k => tallyControl({
     scoreCat: "military", path: "military", key: k.key,
     art: k.art,
     prefix: "×", min: 0,
     pip: k.pts,
     count: numOf(p.military[k.key]),
     label: k.label
-  })).join("")}</div>`,
+  })))],
   // Defeats are the half everyone forgets to subtract, so the working spells the sign out.
   work: p => {
     const m = p.military;
@@ -70,7 +70,11 @@ const military = {
       (losses ? `<span class="term">${losses} defeat${losses === 1 ? "" : "s"}<b>−${losses}</b></span>` : "");
   },
   infer: null,
-  detail: p => ({ ...p.military })
+  detail: p => ({ ...p.military }),
+  restore: (p, d) => {
+    const b = d && typeof d === "object" ? d : {};
+    p.military = { w1: numOf(b.w1), w3: numOf(b.w3), w5: numOf(b.w5), loss: numOf(b.loss) };
+  }
 };
 
 // ---- Treasury: coins, floor-divided by 3 ----
@@ -92,13 +96,13 @@ const treasury = {
   art: coinArt,
   init: () => ({ treasury: 0 }),
   points: p => Math.floor(numOf(p.treasury) / 3),
-  controls: p => `<div class="tally-group">${tallyControl({
+  controls: p => [tallyGroup([tallyControl({
     scoreCat: "treasury", path: "treasury", key: "",
     art: coinArt,
     prefix: "×", min: 0,
     cap: "coin",
     count: numOf(p.treasury), label: "Add a coin"
-  })}</div>`,
+  })])],
   // The leftover coins are the surprise ("I had 17, why only 5?"), so name them explicitly.
   work: p => {
     const coins = Math.max(0, Math.trunc(numOf(p.treasury)));
@@ -108,7 +112,8 @@ const treasury = {
       (rem ? `<span class="term nil">${rem} coin${rem === 1 ? "" : "s"} left over, scoring 0</span>` : "");
   },
   infer: null,
-  detail: p => numOf(p.treasury)
+  detail: p => numOf(p.treasury),
+  restore: (p, d) => { p.treasury = numOf(d); }
 };
 
 // ---- Science: three symbol tallies, tablet² + compass² + gear² + 7·min(tablet,compass,gear) ----
@@ -138,14 +143,14 @@ const science = {
     const t = numOf(p.science.tablet), c = numOf(p.science.compass), g = numOf(p.science.gear);
     return t * t + c * c + g * g + 7 * Math.min(t, c, g);
   },
-  controls: p => `<div class="tally-group">${SCIENCE_KEYS.map(k => tallyControl({
+  controls: p => [tallyGroup(SCIENCE_KEYS.map(k => tallyControl({
     scoreCat: "science", path: "science", key: k.key,
     art: () => scienceArt(k.key),
     prefix: "×", min: 0,
     cap: k.key,
     count: numOf(p.science[k.key]),
     label: k.label
-  })).join("")}</div>`,
+  })))],
   // This line is the reason the whole app exists. Science is the most-miscounted rule in
   // mainstream board gaming: the squares are easy to get wrong and the set bonus is easy to miss
   // entirely, so both halves are shown separately rather than collapsed into one number. 3/2/1
@@ -164,7 +169,11 @@ const science = {
       : `<span class="term nil">no complete set yet — all three symbols scores +7</span>`);
   },
   infer: null,
-  detail: p => ({ ...p.science })
+  detail: p => ({ ...p.science }),
+  restore: (p, d) => {
+    const b = d && typeof d === "object" ? d : {};
+    p.science = { tablet: numOf(b.tablet), compass: numOf(b.compass), gear: numOf(b.gear) };
+  }
 };
 
 // ---- The four card-pile categories: repeatable number lists, summed ----
@@ -181,14 +190,15 @@ function pileCat({ key, label, hint, dot, icon, noun, cardKind }){
     listField: key,
     init: () => ({ [key]: [0] }),
     points: p => p[key].reduce((sum, v) => sum + numOf(v), 0),
-    controls: p => numberList({
+    controls: p => [numberList({
       playerId: p.id, cat: key, values: p[key], uidPrefix: "7w-",
       inputClass: "num-input", inputmode: "numeric",
       removeAriaLabel: `Remove this ${noun}`,
       addLabel: `+ Add ${noun}`
-    }),
+    })],
     infer: null,
-    detail: p => p[key].map(numOf)
+    detail: p => p[key].map(numOf),
+    restore: (p, d) => { p[key] = Array.isArray(d) ? d.map(numOf) : []; }
   };
 }
 
@@ -221,8 +231,8 @@ const guilds = pileCat({
 export const sevenwonders = {
   key: "7wonders",
   label: "7 Wonders",
-  logo: "assets/7wonders-logo.png",
-  tileArt: "assets/7wonders-tile-art.png",
+  logo: "/assets/7wonders-logo.png",
+  tileArt: "/assets/7wonders-tile-art.png",
   tagline: "Build a civilization, count its glory",
   subtitle: "End-of-game tally",
   minPlayers: 3,

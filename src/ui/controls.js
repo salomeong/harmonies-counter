@@ -1,7 +1,19 @@
-// Pure HTML-string builders and small state helpers, extracted from index.html.
+// Control SPECS and small state helpers.
 //
-// These return strings (or read/write a plain `p` object) — no DOM, no module-level mutable
-// state — so they can be unit tested and reused without booting the app.
+// These are pure — no DOM, no module-level mutable state, no framework import — so they unit test
+// without booting anything.
+//
+// ---- Why these return data, not HTML ----
+// They used to return HTML strings, which is how a *game declaration* ended up carrying view
+// concerns: a descriptor's `controls(p, variant)` was emitting markup. That was the single thing
+// standing between this app and a view-layer-only framework port. They now return plain spec
+// objects ({type: "tally", …}) that a renderer turns into whatever it likes — React components
+// here, and nothing stops a different renderer later. The builders kept their names and their
+// argument shapes, so each descriptor changed by roughly one line.
+//
+// Token art is the deliberate exception: tokenArt()/tokenDisc() still return SVG strings, because
+// that art is a pure function of (kind, height) and never varies with score state. It is injected
+// once per control and React never needs to diff inside it.
 
 import { numOf, riverPoints } from "../scoring.js";
 
@@ -85,37 +97,41 @@ export function bumpCount(p, path, key, delta, min){
   setCount(p, path, key, Math.max(min, Math.trunc(getCount(p, path, key)) + delta));
 }
 
+// One token button + its count chip + the minus. `art` is either a tokenArt() kind or a function
+// returning SVG (7 Wonders draws cards and struck tokens, not discs) — the renderer resolves it,
+// so this stays a plain description.
+//
+// `count` and `min` both ride along because the renderer needs them together: the minus is
+// DISABLED at the floor rather than hidden, since a control that appears on first tap reflows the
+// row under a moving finger (CLAUDE.md, "Controls keep their place").
 export function tallyControl(o){
-  const count = o.count;
-  return `
-    <div class="tally">
-      <button class="tally-btn" data-role="tally" data-path="${o.path}" data-key="${o.key}"
-              data-min="${o.min}" data-score-cat="${o.scoreCat}" aria-label="${escapeAttr(o.label)}">
-        ${typeof o.art === "function" ? o.art() : tokenArt(o.art, o.height || 1)}
-        ${o.pip != null
-          ? `<span class="pip">${o.pip}</span>`
-          : `<span class="tally-cap">${o.cap}</span>`}
-      </button>
-      <div class="tally-count">
-        <button class="count-chip" data-role="editCount" data-path="${o.path}" data-key="${o.key}"
-                data-min="${o.min}" data-prefix="${o.prefix}" data-score-cat="${o.scoreCat}"
-                aria-label="${escapeAttr(o.label)} — tap to type the count"
-        ><span class="count-pre">${o.prefix}</span><span class="count-num" data-count-for="${o.path}:${o.key}">${count}</span></button>
-        <button class="minus" data-role="minus" data-path="${o.path}" data-key="${o.key}"
-                data-min="${o.min}" data-score-cat="${o.scoreCat}" data-minus-for="${o.path}:${o.key}"
-                ${count <= o.min ? "disabled" : ""} aria-label="Remove one">−</button>
-      </div>
-    </div>`;
+  return {
+    type: "tally",
+    scoreCat: o.scoreCat,
+    path: o.path,
+    key: o.key || "",
+    art: o.art,
+    height: o.height || 1,
+    pip: o.pip,
+    cap: o.cap,
+    prefix: o.prefix,
+    min: o.min,
+    count: o.count,
+    label: o.label
+  };
 }
 
-export function riverLadder(p){
-  const len = Math.max(0, Math.trunc(numOf(p.river)));
-  const rungs = [1, 2, 3, 4, 5, 6].map(l => ({ l, txt: String(riverPoints(l)) }));
-  rungs.push({ l: 7, txt: "+4" });
-  return `<div class="ladder">${rungs.map(r => {
-    const on = r.l === 7 ? len >= 7 : len === r.l;
-    return `<span class="rung${on ? " on" : ""}" data-rung="${r.l}">${r.txt}</span>`;
-  }).join("")}</div>`;
+// Several tallies read as one row of components — the `.tally-group` wrapper the CSS expects.
+export function tallyGroup(items){
+  return { type: "tallyGroup", items };
+}
+
+// The printed river ladder. Which rung is lit is NOT computed here: the water descriptor already
+// declares `activeRung(p, variant)`, and having two places decide it is how they drift apart.
+export function riverLadder(){
+  const rungs = [1, 2, 3, 4, 5, 6].map(l => ({ value: l, text: String(riverPoints(l)) }));
+  rungs.push({ value: 7, text: "+4" });   // the last rung stands for "7 or more"
+  return { type: "ladder", rungs };
 }
 
 // A repeatable list of typed numbers, summed — Harmonies' animal cards and Faraway's two fame
@@ -134,35 +150,45 @@ export function riverLadder(p){
 export function numberList(o){
   const {
     playerId, cat, values, uidPrefix = "",
-    inputClass, inputmode, escapeValue = true,
+    inputClass, inputmode,
     rowHint, removeAriaLabel, addLabel, min = 0
   } = o;
 
-  const rows = values.map((v, i) => {
-    const classAttr = inputClass ? `class="${inputClass}" ` : "";
-    const modeAttr = inputmode ? ` inputmode="${inputmode}"` : "";
-    const val = escapeValue ? escapeAttr(v) : v;
-    const uid = `${uidPrefix}p${playerId}-${cat}-${i}`;
-    const hint = rowHint ? `\n      <span class="cat-hint" style="margin:0;">${rowHint}</span>` : "";
-    const removeLabelAttr = removeAriaLabel ? ` aria-label="${escapeAttr(removeAriaLabel)}"` : "";
-    const remove = values.length > 1
-      ? `\n      <button data-role="listRemove" data-cat="${cat}" data-index="${i}"${removeLabelAttr}>✕</button>`
-      : "";
-    return `
-    <div class="animal-row">
-      <input ${classAttr}type="number" min="${min}"${modeAttr} value="${val}" data-role="listInput" data-cat="${cat}" data-index="${i}" data-uid="${uid}" />${hint}${remove}
-    </div>`;
-  }).join("");
-
-  return `<div class="animal-list">${rows}
-      <button class="add-btn" data-role="listAdd" data-cat="${cat}">${addLabel}</button>
-    </div>`;
+  return {
+    type: "list",
+    cat,
+    values,
+    min,
+    inputClass,
+    inputmode,
+    rowHint,
+    removeAriaLabel,
+    addLabel,
+    // The remove button only exists past one row, which is why a restored empty list is a shape
+    // the live UI can never reach on its own.
+    showRemove: values.length > 1,
+    uidFor: i => `${uidPrefix}p${playerId}-${cat}-${i}`
+  };
 }
 
+// A single bare number input (Harmonies' Nature Spirit bonus). `subrow` reproduces the
+// `<div class="subrow">` the descriptor used to wrap this in.
 export function numField(playerId, cat, value, placeholder, min = 0){
-  return `<input class="num-input" type="number" min="${min}" inputmode="numeric" value="${escapeAttr(value)}" data-role="numInput" data-cat="${cat}" placeholder="${placeholder}" data-uid="p${playerId}-${cat}" />`;
+  return {
+    type: "num",
+    cat,
+    value,
+    placeholder,
+    min,
+    subrow: true,
+    uid: `p${playerId}-${cat}`
+  };
 }
 
+// Kept because token art is still built as SVG strings. It no longer guards any user-entered
+// text: player names, category labels and aria-labels are React props now, and React escapes
+// those itself — which quietly closes docs/next.md's "escapeAttr doesn't escape > or '" loose end
+// by removing every call site that could have cared.
 export function escapeAttr(s){
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }

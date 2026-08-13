@@ -43,6 +43,11 @@ export function isTotalMode(p, cat){
   return p.totals && p.totals[cat] != null;
 }
 
+// The reserved key under which scorer.detail() stores typed whole-category overrides. Leading
+// underscore so it can never collide with a category key — src/games/registry.test.js asserts no
+// declared cat key starts with "_", which is what keeps that guarantee true as games are added.
+export const TOTALS_KEY = "_totals";
+
 // A value on a category descriptor may be a plain value or a function of the variant — River and
 // Islands are the same category wearing two different labels and hints.
 export function resolve(v, variant){
@@ -108,13 +113,58 @@ export function makeScorer(game, getVariant){
       for (const c of game.cats){
         if (c.detail) out[c.key] = c.detail(p);
       }
+      // A typed whole-category total is raw entered state too — it is literally what the human
+      // typed — and it is NOT recoverable from the per-category detail above: "✎ Enter total"
+      // freezes p.totals[cat] and every later edit touches only that, never the tally fields.
+      // Without this, a 7 Wonders game scored by typing totals saves {tablet:0,compass:0,gear:0}
+      // next to a total_score of 62 — and every one of 7 Wonders' seven categories is `infer: null`,
+      // so they all keep the override permanently. Stored raw (a typed total may be the string
+      // "21", or "") so the round trip is exact; catPoints() already reads it through numOf().
+      if (p.totals && Object.keys(p.totals).length) out[TOTALS_KEY] = { ...p.totals };
       return out;
+    },
+
+    // The declared inverse of detail(): rebuilds a player-shaped object from a saved ledger blob.
+    //
+    // Every category starts from its own init(), so a category the game gained AFTER a row was
+    // saved is a real zero-state rather than undefined — but only categories actually present in
+    // the blob are restored, and `present` is what lets a recap tell "scored nothing" apart from
+    // "did not exist yet". Rendering the second as a hard 0 would claim someone scored zero in a
+    // category their game never had.
+    //
+    // Restoring p.totals is what makes this pay off: catPoints/breakdown/total and a descriptor's
+    // work() then read the reconstructed player completely unmodified, because isTotalMode() has no
+    // idea whether p came from a live card or out of Postgres.
+    fromDetail(detail, opts){
+      const d = detail && typeof detail === "object" && !Array.isArray(detail) ? detail : {};
+      const o = opts || {};
+      const player = api.newPlayer(o.id != null ? o.id : 0, o.name);
+      const present = [];
+
+      for (const c of game.cats){
+        if (!c.restore || !Object.prototype.hasOwnProperty.call(d, c.key)) continue;
+        c.restore(player, d[c.key]);
+        present.push(c.key);
+      }
+
+      const saved = d[TOTALS_KEY];
+      if (saved && typeof saved === "object" && !Array.isArray(saved)){
+        for (const key of Object.keys(saved)){
+          if (byKey.has(key) && saved[key] != null) player.totals[key] = saved[key];
+        }
+      }
+
+      return { player, present };
     },
 
     newPlayer(id, name){
       // `id` is read before it is consumed by the caller's counter — naming off the post-increment
       // value is what used to label the third player "Player 4".
-      const p = { id, name: name || `Player ${id}`, totals: {}, open: new Set([game.cats[0].key]) };
+      //
+      // `open` is an ARRAY, not a Set. It was a Set while a single mutable `S` object owned it and
+      // `p.open.add(k)` was enough to change the world; under React, mutating in place is invisible
+      // (referential equality) and a Set does not survive JSON, which a saved/restored player must.
+      const p = { id, name: name || `Player ${id}`, totals: {}, open: [game.cats[0].key] };
       for (const c of game.cats) Object.assign(p, c.init());
       return p;
     },

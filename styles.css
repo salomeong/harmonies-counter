@@ -95,7 +95,7 @@
     font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     background:
       linear-gradient(rgba(255,251,240,0.55), rgba(255,251,240,0.55)),
-      var(--bg) url("assets/parchment-bg.jpg") center / cover fixed no-repeat;
+      var(--bg) url("/assets/parchment-bg.jpg") center / cover fixed no-repeat;
     color: var(--ink);
     padding: 16px;
     padding-bottom: 100px;
@@ -106,18 +106,18 @@
     body{
       background:
         linear-gradient(rgba(10,14,9,0.78), rgba(10,14,9,0.78)),
-        var(--bg) url("assets/parchment-bg.jpg") center / cover fixed no-repeat;
+        var(--bg) url("/assets/parchment-bg.jpg") center / cover fixed no-repeat;
     }
   }
   :root[data-theme="dark"] body{
     background:
       linear-gradient(rgba(10,14,9,0.78), rgba(10,14,9,0.78)),
-      var(--bg) url("assets/parchment-bg.jpg") center / cover fixed no-repeat;
+      var(--bg) url("/assets/parchment-bg.jpg") center / cover fixed no-repeat;
   }
   :root[data-theme="light"] body{
     background:
       linear-gradient(rgba(255,251,240,0.55), rgba(255,251,240,0.55)),
-      var(--bg) url("assets/parchment-bg.jpg") center / cover fixed no-repeat;
+      var(--bg) url("/assets/parchment-bg.jpg") center / cover fixed no-repeat;
   }
   .corner-critter{
     position: fixed;

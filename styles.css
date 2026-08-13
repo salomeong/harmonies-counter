@@ -148,7 +148,7 @@
   .logo-wrap{
     display: flex;
     justify-content: center;
-    margin-bottom: 2px;
+    margin-bottom: 8px;
   }
   .logo-wrap.hidden{ display: none; }
   .logo-wrap img{
@@ -164,12 +164,30 @@
   .masthead-home{
     border: none;
     background: none;
-    padding: 0;
-    display: block;
+    padding: 0 0 5px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     cursor: pointer;
     border-radius: 10px;
     /* the settle of a stamp being pressed, not a UI button bouncing */
     transition: transform 0.12s ease, filter 0.12s ease;
+  }
+  .masthead-home span{
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: -2px;
+    color: var(--accent-text);
+    font: 700 0.72rem/1 ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    letter-spacing: 0.02em;
+  }
+  .masthead-home span::before,
+  .masthead-home span::after{
+    content: "";
+    width: 22px;
+    height: 1px;
+    background: var(--line);
   }
   .masthead-home:active{
     transform: translateY(1px) scale(0.985);
@@ -1025,7 +1043,7 @@
 
   .top-links{
     max-width: 640px;
-    margin: 0 auto 10px;
+    margin: 0 auto 12px;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -1038,6 +1056,51 @@
     font-weight: 600;
     cursor: pointer;
     padding: 4px 2px;
+  }
+  .nav-action{
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid var(--line);
+    border-radius: 9px 9px 7px 7px;
+    background: color-mix(in srgb, var(--card) 90%, transparent);
+    color: var(--accent-text);
+    box-shadow: 0 2px 0 var(--line), 0 4px 10px rgba(47,59,47,0.05);
+    padding: 7px 11px;
+    font: 700 0.78rem/1 ui-rounded, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    text-decoration: none;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+  }
+  .nav-icon{
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .nav-action:active{
+    transform: translateY(2px);
+    box-shadow: none;
+  }
+  .nav-action:focus-visible,
+  a.history-row:focus-visible,
+  .game-tile:focus-visible{
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+  @media (hover: hover){
+    .nav-action:hover{
+      border-color: var(--green-dark);
+      background: var(--winner);
+      transform: translateY(-1px);
+    }
   }
 
   .landing-card{
@@ -1084,14 +1147,14 @@
   }
 
   .picker-grid{
-    max-width: 640px;
+    max-width: 760px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 14px;
   }
-  @media (max-width: 480px){
-    .picker-grid{ grid-template-columns: 1fr; }
+  @media (max-width: 680px){
+    .picker-grid{ grid-template-columns: 1fr 1fr; }
   }
   .game-tile{
     display: flex;
@@ -1138,15 +1201,61 @@
     width: min(60%, 180px);
     height: auto;
     margin-top: 2px;
-    background: #fbf6e9;
-    border-radius: 8px;
-    padding: 6px 10px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    padding: 3px 8px;
+    filter: drop-shadow(0 2px 3px rgba(47,59,47,0.18));
   }
   .game-tile-tagline{
     font-size: 0.78rem;
     color: var(--muted);
     text-align: center;
+  }
+  @media (max-width: 480px){
+    .picker-grid{
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .game-tile{
+      min-height: 112px;
+      display: grid;
+      grid-template-columns: 104px minmax(0, 1fr);
+      grid-template-rows: 1fr auto;
+      column-gap: 12px;
+      row-gap: 5px;
+      padding: 9px;
+      text-align: center;
+    }
+    .game-tile-art{
+      grid-row: 1 / 3;
+      width: 104px;
+      height: 94px;
+      aspect-ratio: auto;
+      border-radius: 8px;
+    }
+    .game-tile-logo{
+      align-self: end;
+      justify-self: center;
+      width: min(88%, 150px);
+      max-height: 52px;
+      object-fit: contain;
+      margin: 0;
+      padding: 2px 4px;
+    }
+    .game-tile-tagline{
+      align-self: start;
+      line-height: 1.25;
+      padding-bottom: 2px;
+    }
+    #view-picker.active ~ .citation-footer{
+      margin-top: 18px;
+      opacity: 0.78;
+    }
+  }
+  @media (max-width: 340px){
+    .game-tile{
+      grid-template-columns: 88px minmax(0, 1fr);
+      column-gap: 9px;
+    }
+    .game-tile-art{ width: 88px; height: 82px; }
   }
 
   .chip-row{
@@ -1174,11 +1283,17 @@
     padding: 2px 2px;
   }
   .chip-history{
-    border-radius: 50%;
-    padding: 4px 6px !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    border-left: 1px solid var(--line) !important;
+    border-radius: 0 999px 999px 0;
+    padding: 5px 7px !important;
     color: var(--muted) !important;
-    font-weight: 400 !important;
+    font-size: 0.7rem !important;
+    font-weight: 700 !important;
   }
+  .chip-history .nav-icon{ width: 13px; height: 13px; }
   .chip-meta{
     font-size: 0.72rem;
     color: var(--muted);
@@ -1186,7 +1301,7 @@
   .landing-hint{
     display: flex;
     justify-content: center;
-    gap: 18px;
+    gap: 9px;
     flex-wrap: wrap;
     font-size: 0.78rem;
     color: var(--muted);
@@ -1256,7 +1371,7 @@
   .history-row{
     display: flex;
     justify-content: space-between;
-    padding: 8px 0;
+    padding: 10px 8px;
     border-top: 1px solid var(--line);
     font-size: 0.9rem;
   }
@@ -1268,10 +1383,11 @@
     color: inherit;
     text-decoration: none;
     border-radius: 8px;
-    transition: background 0.12s ease;
+    margin-inline: -8px;
+    transition: background 0.12s ease, transform 0.12s ease;
   }
   @media (hover: hover){
-    a.history-row:hover{ background: var(--bg); }
+    a.history-row:hover{ background: var(--bg); transform: translateX(2px); }
   }
   .history-row.is-best{
     color: var(--accent-text);
@@ -1285,6 +1401,16 @@
   .history-row .name{
     flex: 1;
     text-align: left;
+  }
+  .row-score{
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    font-weight: 800;
+  }
+  .row-score .nav-icon{
+    width: 14px;
+    color: var(--accent-text);
   }
   .history-row.top-3 .rank{
     color: var(--accent-text);

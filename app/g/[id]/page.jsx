@@ -12,6 +12,8 @@ import { RecapHeader, RecapPlayers } from "@/app/_components/Recap.jsx";
 import { ShareButton } from "@/app/_components/ShareButton.jsx";
 import { PhotoUpload } from "@/app/_components/PhotoUpload.jsx";
 import { formatDate } from "@/app/_lib/format.js";
+import { NavIcon } from "@/app/_components/NavIcon.jsx";
+import { recapBackTarget } from "@/app/_lib/navigation.js";
 
 // Reads process.env.DATABASE_URL through the lazy getSql() inside lib/session.mjs — force-dynamic
 // keeps Next from trying to evaluate (and cache) this at `next build` time, when there is no
@@ -55,16 +57,18 @@ export async function generateMetadata({ params }){
   return { title, description, openGraph: { title, description } };
 }
 
-export default async function SessionPage({ params }){
+export default async function SessionPage({ params, searchParams }){
   const { id } = await params;
   const data = await loadRecap(id);
   if (!data) notFound();
   const { session, game, scorer, restored } = data;
+  const query = await searchParams;
+  const back = recapBackTarget(query, game);
 
   return (
     <div className="page-inner">
       <div className="top-links">
-        <Link href="/" className="link-btn">🎲 The Faithful Tally</Link>
+        <Link href={back.href} replace className="nav-action"><NavIcon name="back" /> {back.label}</Link>
         <ShareButton />
       </div>
       <RecapHeader game={game} session={session} />

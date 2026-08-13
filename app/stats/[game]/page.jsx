@@ -8,6 +8,7 @@ import { makeScorer } from "@/src/scoring.js";
 import { getWinRates, getStreaks, getHeadToHead, getDetailRowsForStats } from "@/lib/stats.mjs";
 import { StatsHeader, WinRateSection, HeadToHeadSection, CategoryBestsSection } from "@/app/_components/Stats.jsx";
 import { ShareButton } from "@/app/_components/ShareButton.jsx";
+import { NavIcon } from "@/app/_components/NavIcon.jsx";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +68,7 @@ export default async function StatsPage({ params }){
   return (
     <div className="page-inner">
       <div className="top-links">
-        <Link href="/" className="link-btn">🎲 The Faithful Tally</Link>
+        <Link href="/" className="nav-action"><NavIcon name="home" /> All games</Link>
         <ShareButton />
       </div>
       <StatsHeader game={game} gamesLogged={gamesLogged} />

@@ -11,8 +11,10 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { useTally } from "./_state/useTally.js";
 import { Scorer } from "./_components/Scorer.jsx";
+import { NavIcon } from "./_components/NavIcon.jsx";
 import { fetchProfiles, fetchProfile, fetchLeaderboard, postGame } from "@/src/api.js";
 import { formatDate } from "./_lib/format.js";
+import { restoreDestination } from "./_lib/navigation.js";
 
 export default function Page(){
   const { state, dispatch, game, gs, scorer, variant, handlersFor, games } = useTally();
@@ -27,6 +29,17 @@ export default function Page(){
       if (v === "0") dispatch({ type: "hydrateRules", showRules: false });
     } catch {}
   }, [dispatch]);
+
+  // Recap pages preserve where a record link came from. Restore that in-app destination instead
+  // of dumping someone at the game picker when they choose a visible Back action.
+  useEffect(() => {
+    const destination = restoreDestination(location.search, games.map(g => g.key));
+    if (!destination) return;
+    dispatch({ type: "selectGame", key: destination.game });
+    if (destination.view === "leaderboard") dispatch({ type: "setView", view: "leaderboard" });
+    if (destination.view === "history") dispatch({ type: "openHistory", key: destination.profile });
+    window.history.replaceState(null, "", "/");
+  }, [dispatch, games]);
 
   const profiles = useQuery({
     queryKey: ["profiles", state.activeGame],
@@ -85,6 +98,7 @@ export default function Page(){
                   aria-label="Switch game — back to the game picker"
                   onClick={() => dispatch({ type: "setView", view: "picker" })}>
             <img src={game ? game.logo : "/assets/logo.png"} alt={game ? game.label : "Harmonies"} />
+            <span><NavIcon name="game" /> Switch game</span>
           </button>
         </div>
 
@@ -122,15 +136,17 @@ export default function Page(){
                       <button onClick={() => startScorer(pr.displayName)}>{pr.displayName}</button>
                       <span className="chip-meta">🏆 {pr.highScore}</span>
                       <button className="chip-history" title="View history"
-                              onClick={() => dispatch({ type: "openHistory", key: pr.key })}>📜</button>
+                              onClick={() => dispatch({ type: "openHistory", key: pr.key })}>
+                        <NavIcon name="history" /> History
+                      </button>
                     </div>
                   ))}
             </div>
             <div className="landing-hint">
-              <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "scorer" })}>Just tally a game →</button>
-              <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "leaderboard" })}>🏆 Leaderboard</button>
-              {state.activeGame ? <Link href={`/stats/${state.activeGame}`} className="link-btn">📊 Stats</Link> : null}
-              <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "picker" })}>🎲 Switch game</button>
+              <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "scorer" })}><NavIcon name="tally" /> Tally without a name</button>
+              <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "leaderboard" })}><NavIcon name="trophy" /> Leaderboard</button>
+              {state.activeGame ? <Link href={`/stats/${state.activeGame}`} className="nav-action"><NavIcon name="chart" /> Stats</Link> : null}
+              <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "picker" })}><NavIcon name="game" /> Switch game</button>
             </div>
           </div>
         </div>
@@ -139,8 +155,8 @@ export default function Page(){
         <div className={"view" + (view === "scorer" ? " active" : "")} id="view-scorer"
              data-game={game ? game.key : undefined}>
           <div className="top-links">
-            <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "landing" })}>🏠 Switch player</button>
-            <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "leaderboard" })}>🏆 Leaderboard</button>
+            <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "landing" })}><NavIcon name="players" /> Switch player</button>
+            <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "leaderboard" })}><NavIcon name="trophy" /> Leaderboard</button>
           </div>
           <div className="subtitle">{game ? game.subtitle : ""}</div>
 
@@ -199,7 +215,7 @@ export default function Page(){
         {/* ---- History ---- */}
         <div className={"view" + (view === "history" ? " active" : "")} id="view-history">
           <div className="top-links">
-            <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "landing" })}>← Back</button>
+            <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "landing" })}><NavIcon name="back" /> Players</button>
             <span />
           </div>
           <div className="history-card">
@@ -210,9 +226,9 @@ export default function Page(){
                 : history.isError ? <div className="history-empty">Couldn&apos;t load history. <button className="link-btn" onClick={() => history.refetch()}>Retry</button></div>
                 : !history.data ? <div className="history-empty">No history yet.</div>
                 : history.data.games.map((g, i) => (
-                    <Link key={i} href={`/g/${g.sessionId}`}
+                    <Link key={i} href={`/g/${g.sessionId}?from=history&game=${state.activeGame}&profile=${encodeURIComponent(state.historyKey)}`}
                           className={"history-row" + (g.total === history.data.highScore ? " is-best" : "")}>
-                      <span>{formatDate(g.playedAt)}</span><span>{g.total}</span>
+                      <span>{formatDate(g.playedAt)}</span><span className="row-score">{g.total}<NavIcon name="arrow" /></span>
                     </Link>
                   ))}
             </div>
@@ -222,8 +238,8 @@ export default function Page(){
         {/* ---- Leaderboard ---- */}
         <div className={"view" + (view === "leaderboard" ? " active" : "")} id="view-leaderboard">
           <div className="top-links">
-            <button className="link-btn" onClick={() => dispatch({ type: "setView", view: "landing" })}>← Back</button>
-            {state.activeGame ? <Link href={`/stats/${state.activeGame}`} className="link-btn">📊 Stats</Link> : <span />}
+            <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "landing" })}><NavIcon name="back" /> Players</button>
+            {state.activeGame ? <Link href={`/stats/${state.activeGame}`} className="nav-action"><NavIcon name="chart" /> Stats</Link> : <span />}
           </div>
           <div className="history-card">
             <div className="history-title">🏆 Leaderboard</div>
@@ -232,11 +248,11 @@ export default function Page(){
                 : leaderboard.isError ? <div className="history-empty">Couldn&apos;t load the leaderboard. <button className="link-btn" onClick={() => leaderboard.refetch()}>Retry</button></div>
                 : !(leaderboard.data?.leaderboard || []).length ? <div className="history-empty">No games saved yet.</div>
                 : leaderboard.data.leaderboard.map((p, i) => (
-                    <Link key={p.displayName + i} href={`/g/${p.sessionId}`}
+                    <Link key={p.displayName + i} href={`/g/${p.sessionId}?from=leaderboard&game=${state.activeGame}`}
                           className={"history-row" + (i < 3 ? " top-3" : "")}>
                       <span className="rank">#{i + 1}</span>
                       <span className="name">{p.displayName}</span>
-                      <span>{p.highScore}</span>
+                      <span className="row-score">{p.highScore}<NavIcon name="arrow" /></span>
                     </Link>
                   ))}
             </div>

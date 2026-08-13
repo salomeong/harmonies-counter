@@ -96,7 +96,7 @@ describe("CategoryBestsSection", () => {
     expect(rows.length).toBe(2); // not all seven of harmonies' categories — only the two present
     const treesRow = container.querySelector('.category[data-cat="trees"]');
     expect(treesRow.tagName).toBe("A");
-    expect(treesRow.getAttribute("href")).toBe("/g/abc123");
+    expect(treesRow.getAttribute("href")).toBe("/g/abc123?from=stats");
     expect(treesRow.querySelector(".stat-best-value").textContent).toBe("17 — Salome");
   });
 });

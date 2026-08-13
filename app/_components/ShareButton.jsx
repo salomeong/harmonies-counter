@@ -5,6 +5,7 @@
 // browser always does.
 
 import { useState } from "react";
+import { NavIcon } from "./NavIcon.jsx";
 
 export function ShareButton(){
   const [copied, setCopied] = useState(false);
@@ -21,8 +22,8 @@ export function ShareButton(){
   }
 
   return (
-    <button className="link-btn" onClick={copy}>
-      {copied ? "✓ Copied" : "🔗 Copy link"}
+    <button className="nav-action" onClick={copy}>
+      <NavIcon name="share" /> {copied ? "Copied" : "Copy link"}
     </button>
   );
 }

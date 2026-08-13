@@ -105,7 +105,7 @@ export function CategoryBestsSection({ game, scorer, bests }){
       {rows.map(cat => {
         const best = bests[cat.key];
         return (
-          <Link href={`/g/${best.sessionId}`} className="category stat-best-row" key={cat.key} data-cat={cat.key}>
+          <Link href={`/g/${best.sessionId}?from=stats`} className="category stat-best-row" key={cat.key} data-cat={cat.key}>
             <div className="cat-label">
               <span className="tok-dot" style={{ background: `var(${scorer.dot(cat.key)})` }} />
               <BestIcon scorer={scorer} catKey={cat.key} />

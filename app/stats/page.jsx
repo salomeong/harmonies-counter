@@ -4,12 +4,14 @@
 
 import Link from "next/link";
 import { GAME_LIST } from "@/src/games/index.js";
+import { NavIcon } from "@/app/_components/NavIcon.jsx";
 
 export const metadata = { title: "Stats — The Faithful Tally" };
 
 export default function StatsPickerPage(){
   return (
     <div className="page-inner">
+      <div className="top-links"><Link href="/" className="nav-action"><NavIcon name="home" /> All games</Link></div>
       <div className="site-name">The Faithful Tally</div>
       <div className="subtitle">Stats for which game?</div>
       <div className="picker-grid">

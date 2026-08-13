@@ -195,7 +195,9 @@ session's photo from silently landing in another's folder if that code is ever r
 
 `scripts/sessions.mjs --delete` deletes the actual Blob objects (via `@vercel/blob`'s `del()`)
 before dropping the session row — `session_photos` cascades the *database* row on its own, but the
-image bytes in Blob storage don't go away without an explicit call.
+image bytes in Blob storage don't go away without an explicit call. To remove a single test photo
+without touching the session it belongs to, use `--delete-photo <url>` instead — see "Running it"
+below for why that distinction is load-bearing, not a nicety.
 
 ### Adding a game
 
@@ -374,11 +376,22 @@ by decision (docs/deploying.md), so a local save writes rows your friends will s
 flow is fine; leaving the rows behind is not:
 
 ```bash
-node --env-file=.env.local scripts/sessions.mjs                # list saved sessions
-node --env-file=.env.local scripts/sessions.mjs <public_id>    # one session, detail and all
-node --env-file=.env.local scripts/sessions.mjs --delete <id>  # remove it again
-node --env-file=.env.local scripts/sessions.mjs --prune-people # drop people left with no games
+node --env-file=.env.local scripts/sessions.mjs                        # list saved sessions
+node --env-file=.env.local scripts/sessions.mjs <public_id>            # one session, detail and all
+node --env-file=.env.local scripts/sessions.mjs --delete <id>          # remove the WHOLE session
+node --env-file=.env.local scripts/sessions.mjs --delete-photo <url>   # remove one photo only
+node --env-file=.env.local scripts/sessions.mjs --prune-people         # drop people left with no games
 ```
+
+**`--delete` removes the whole session — real games included, no confirmation prompt.** This
+was learned the direct way: cleaning up one test photo attached to an otherwise-real saved game by
+running `--delete <that session's public_id>` deletes the game too, not just the photo. It happened
+once, mid-M4, to the app's own first real saved game — recovered because `sessions.mjs <public_id>`
+had been run moments before and every field (including both players' full `detail`) was still on
+screen, and because `people` rows survive session deletion by design, so both players' identities
+were never at risk. Recovery was a hand-written `INSERT` reproducing the row exactly, `public_id`
+and `played_at` included. **Use `--delete-photo` for a single photo; reach for `--delete` only when
+the whole session is what you actually mean to remove.**
 
 `scripts/inspect-db.mjs` prints table row counts — the cheapest way to find out what you are
 pointed at before doing anything destructive.

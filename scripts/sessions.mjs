@@ -1,8 +1,9 @@
 // Inspect or delete saved sessions, by public_id.
 //
-//   node --env-file=.env.local scripts/sessions.mjs                 # list every session
-//   node --env-file=.env.local scripts/sessions.mjs <public_id>     # one session in full
-//   node --env-file=.env.local scripts/sessions.mjs --delete <id>…  # delete sessions
+//   node --env-file=.env.local scripts/sessions.mjs                     # list every session
+//   node --env-file=.env.local scripts/sessions.mjs <public_id>         # one session in full
+//   node --env-file=.env.local scripts/sessions.mjs --delete <id>…      # delete WHOLE sessions
+//   node --env-file=.env.local scripts/sessions.mjs --delete-photo <blob-url>…  # one photo only
 //
 // This exists because preview and production share one database by decision (docs/deploying.md),
 // so any end-to-end test of the save flow writes rows a real person will otherwise see. Writing
@@ -10,6 +11,12 @@
 // how you delete the wrong one. `session_players` and `session_photos` cascade from `sessions` —
 // but that only removes the DATABASE rows; the actual image bytes live in Vercel Blob and don't go
 // away on their own, so --delete also deletes the blob objects themselves before dropping the row.
+//
+// --delete removes the WHOLE session, real games included — there is deliberately no confirmation
+// prompt, because this is a non-interactive script. `--delete-photo` exists because this was
+// learned the hard way: cleaning up one test photo attached to an otherwise-real saved game by
+// running `--delete <that session's id>` deletes the game too. Use `--delete-photo` for a single
+// photo; reach for `--delete` only when the whole session itself is what you mean to remove.
 //
 // A `people` row deliberately SURVIVES deletion of its sessions: `person_id` is ON DELETE SET NULL
 // and a person is not owned by any one game. Orphaned people are reported so you can see them,
@@ -26,11 +33,16 @@ const sql = neon(process.env.DATABASE_URL);
 
 const args = process.argv.slice(2);
 const deleting = args[0] === '--delete';
+const deletingPhoto = args[0] === '--delete-photo';
 const pruning = args[0] === '--prune-people';
-const ids = deleting ? args.slice(1) : args;
+const ids = deleting || deletingPhoto ? args.slice(1) : args;
 
 if (deleting && !ids.length){
   console.error('--delete needs at least one public_id.');
+  process.exit(1);
+}
+if (deletingPhoto && !ids.length){
+  console.error('--delete-photo needs at least one blob_url (or a distinguishing substring of one).');
   process.exit(1);
 }
 
@@ -92,6 +104,31 @@ async function remove(publicIds){
   }
 }
 
+// Removes ONE photo — the database row and the Blob object — without touching the session it
+// belongs to. Matches by exact URL or by substring, so you don't have to paste the full
+// random-suffixed URL back in; a substring that matches more than one photo is refused rather than
+// guessed at.
+async function removePhoto(matches){
+  for (const match of matches){
+    const rows = await sql`
+      SELECT id, session_id, blob_url FROM session_photos WHERE blob_url LIKE ${'%' + match + '%'}`;
+    if (!rows.length){ console.log(`${match}: no photo matched`); continue; }
+    if (rows.length > 1){
+      console.log(`${match}: matches ${rows.length} photos, refusing to guess — be more specific:`);
+      rows.forEach(r => console.log(`  ${r.blob_url}`));
+      continue;
+    }
+    const [photo] = rows;
+    try {
+      await del(photo.blob_url);
+    } catch (err) {
+      console.log(`  warning: couldn't delete the blob object: ${err.message}`);
+    }
+    await sql`DELETE FROM session_photos WHERE id = ${photo.id}`;
+    console.log(`deleted photo ${photo.blob_url} (session itself untouched)`);
+  }
+}
+
 // Separate and explicit, because deleting a person is not part of deleting a game they played.
 // Only ever removes people with no remaining seats anywhere, which is why it takes no arguments.
 async function prunePeople(){
@@ -105,6 +142,7 @@ async function prunePeople(){
 }
 
 if (deleting) await remove(ids);
+else if (deletingPhoto) await removePhoto(ids);
 else if (pruning) await prunePeople();
 else if (ids.length) for (const id of ids) await show(id);
 else await list();

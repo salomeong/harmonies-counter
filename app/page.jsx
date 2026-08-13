@@ -8,13 +8,11 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import Link from "next/link";
 import { useTally } from "./_state/useTally.js";
 import { Scorer } from "./_components/Scorer.jsx";
 import { fetchProfiles, fetchProfile, fetchLeaderboard, postGame } from "@/src/api.js";
-
-function formatDate(iso){
-  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-}
+import { formatDate } from "./_lib/format.js";
 
 export default function Page(){
   const { state, dispatch, game, gs, scorer, variant, handlersFor, games } = useTally();
@@ -183,6 +181,11 @@ export default function Page(){
                       <div key={c.key}>🎉 New high score for {c.displayName} — {c.total} (previous best {c.previousHigh})!</div>
                     ))
                   : `Saved ${save.data.saved.length} player${save.data.saved.length === 1 ? "" : "s"}' game.`}
+              {!save.isError && save.data?.publicId ? (
+                <div className="save-banner-link">
+                  <Link href={`/g/${save.data.publicId}`} className="link-btn">View this game →</Link>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -206,9 +209,10 @@ export default function Page(){
                 : history.isError ? <div className="history-empty">Couldn&apos;t load history. <button className="link-btn" onClick={() => history.refetch()}>Retry</button></div>
                 : !history.data ? <div className="history-empty">No history yet.</div>
                 : history.data.games.map((g, i) => (
-                    <div key={i} className={"history-row" + (g.total === history.data.highScore ? " is-best" : "")}>
+                    <Link key={i} href={`/g/${g.sessionId}`}
+                          className={"history-row" + (g.total === history.data.highScore ? " is-best" : "")}>
                       <span>{formatDate(g.playedAt)}</span><span>{g.total}</span>
-                    </div>
+                    </Link>
                   ))}
             </div>
           </div>
@@ -227,11 +231,12 @@ export default function Page(){
                 : leaderboard.isError ? <div className="history-empty">Couldn&apos;t load the leaderboard. <button className="link-btn" onClick={() => leaderboard.refetch()}>Retry</button></div>
                 : !(leaderboard.data?.leaderboard || []).length ? <div className="history-empty">No games saved yet.</div>
                 : leaderboard.data.leaderboard.map((p, i) => (
-                    <div key={p.displayName + i} className={"history-row" + (i < 3 ? " top-3" : "")}>
+                    <Link key={p.displayName + i} href={`/g/${p.sessionId}`}
+                          className={"history-row" + (i < 3 ? " top-3" : "")}>
                       <span className="rank">#{i + 1}</span>
                       <span className="name">{p.displayName}</span>
                       <span>{p.highScore}</span>
-                    </div>
+                    </Link>
                   ))}
             </div>
           </div>

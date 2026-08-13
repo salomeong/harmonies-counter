@@ -1,9 +1,10 @@
 // GET /api/session?id=<public_id> -> the full session record: everyone who played, in seat
-// order, with their per-category detail. This is the read side of the atomic write in
-// api/save-game.js — the endpoint a future session-detail/recap view (not built here, see
-// CLAUDE.md) will hang off of.
+// order, with their per-category detail. The /g/[id] recap page does NOT go through this route —
+// it queries lib/session.mjs directly, since a Server Component fetching its own API is a needless
+// round trip. This route exists for any future client-side caller (a client-rendered widget, a
+// future public API) that isn't itself running on the server.
 import { NextResponse } from 'next/server';
-import { getSql } from '../../../lib/db.mjs';
+import { getSessionByPublicId } from '../../../lib/session.mjs';
 
 // This route reads process.env.DATABASE_URL through the lazy getSql() below — force-dynamic keeps
 // Next from trying to evaluate (and cache) it at `next build` time, when there is no database.
@@ -22,33 +23,11 @@ export async function GET(request) {
   }
 
   try {
-    const sql = getSql();
-    const sessions = await sql`
-      SELECT id, public_id AS "publicId", game_key AS "gameKey", played_at AS "playedAt",
-             ended_by AS "endedBy", variant
-      FROM sessions WHERE public_id = ${publicId}
-    `;
-    const session = sessions[0];
+    const session = await getSessionByPublicId(publicId);
     if (!session) {
       return NextResponse.json({ error: 'not_found' }, { status: 404 });
     }
-
-    const players = await sql`
-      SELECT seat, display_name AS "displayName", total_score AS total,
-             is_winner AS "isWinner", detail
-      FROM session_players
-      WHERE session_id = ${session.id}
-      ORDER BY seat ASC
-    `;
-
-    return NextResponse.json({
-      publicId: session.publicId,
-      gameKey: session.gameKey,
-      playedAt: session.playedAt,
-      endedBy: session.endedBy,
-      variant: session.variant,
-      players,
-    }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json(session, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     console.error('GET /api/session failed:', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

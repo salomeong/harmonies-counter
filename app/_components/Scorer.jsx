@@ -5,14 +5,7 @@
 
 import { tokenArt } from "@/src/ui/controls.js";
 import { PlayerCard, CatBody } from "./Card.jsx";
-
-export const MASCOTS = [
-  "/assets/animal-fennec.png",
-  "/assets/animal-rabbit.png",
-  "/assets/animal-bird.png",
-  "/assets/animal-boar.png",
-  "/assets/animal-mouse.png"
-];
+import { MASCOTS } from "@/app/_lib/mascots.js";
 
 // The same drawn tokens as the tally buttons, so the strip reads as one visual language rather
 // than a second icon set. A category's `art` drives it — a tokenArt() kind for the disc games, or

@@ -1,14 +1,15 @@
 # The ledger — schema and API
 
 How a saved game is stored, and why. Referenced from CLAUDE.md; read this before touching
-`schema.sql`, `api/*` or anything that writes a score.
+`schema.sql`, `app/api/*` or anything that writes a score.
 
 
 A saved game is a **session**, not a row per player. `sessions` + `session_players` (+ `people`,
 + `session_photos`) replaced the old `profiles`/`games` pair, where two people at the same table
-produced two unrelated rows — no opponents, no per-category detail, no URL. `api/session.js`
-returns one by its `public_id`, which is what lets a leaderboard link back to the game that earned
-a score.
+produced two unrelated rows — no opponents, no per-category detail, no URL. `lib/session.mjs`'s
+`getSessionByPublicId()` returns one by its `public_id` — the query `GET /api/session` and
+`app/g/[id]/page.jsx` (the recap route, live since 2026-08-13) both call, so the JSON API and the
+page that renders it directly against Postgres can't drift apart.
 
 The seam: **anything you rank, filter or aggregate across games is a real column; anything you only
 display inside its own game's context is `session_players.detail` JSONB.** `detail` holds the RAW
@@ -44,7 +45,12 @@ would be blocked by data we captured but shaped badly.
   reconstructed player unmodified — `isTotalMode()` cannot tell a live card from a Postgres row.
 - `fromDetail` returns `{ player, present }`. **`present` is load-bearing:** a category absent from
   an older blob must render as absent, not as a hard 0, or the recap claims someone scored zero in
-  a category their game did not have.
+  a category their game did not have. Live in `app/_components/Recap.jsx`'s `UntrackedRow`, not
+  just designed for it.
+- The recap (`app/g/[id]/page.jsx`) always shows `total_score` as the headline, never a value
+  recomputed from `detail` — a rule change after the fact is expected, not corruption, and the two
+  numbers are allowed to diverge. When they do, the recap labels the recomputed one explicitly
+  rather than silently picking a side.
 - The write is atomic via `sql.transaction([...])`. The neon HTTP driver has no interactive
   transactions, so the handler generates `public_id` up front and later statements resolve the
   session by it rather than needing an id back mid-transaction.

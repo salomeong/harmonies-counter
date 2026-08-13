@@ -1,11 +1,10 @@
-// All /api/* access goes through here.
+// All /api/* access from the client goes through here. (The /g/[id] recap route does NOT use this
+// file — it's a Server Component and queries lib/session.mjs directly, no HTTP round trip needed.)
 //
-// Previously there were THREE hand-rolled request-race guards (landing chips, history,
-// leaderboard), each pairing its own incrementing request id with its own AbortController and its
-// own 10s timeout. The AbortController + timeout part is now one shared helper, fetchJson(); the
-// "ignore this response if a newer request has since started" part is caller-specific (it depends
-// on which request-id counter and which DOM nodes are involved), so that half still lives with
-// each caller in src/ui/views.js, unchanged in behaviour.
+// The stale-response race that three hand-rolled guards used to solve separately (landing chips,
+// history, leaderboard, each with its own incrementing request id) is now TanStack Query's job —
+// see app/providers.jsx — so fetchJson() only needs to own the timeout/abort plumbing, not request
+// ordering.
 
 // Fetches `url`, aborting after `timeout` ms (or when the caller's own `signal` aborts). Throws on
 // a non-OK response — the thrown Error carries `.status` so a caller that needs to treat a
@@ -48,6 +47,13 @@ export async function fetchProfile(key, gameKey){
 
 export async function fetchLeaderboard(gameKey){
   return fetchJson("/api/leaderboard?game=" + encodeURIComponent(gameKey));
+}
+
+// Unused by the recap page itself (see the file header), but kept as the client-side counterpart
+// to GET /api/session for anything that isn't a Server Component — a future client-side widget, or
+// tests that want to hit the route the way a browser would.
+export async function fetchSession(publicId){
+  return fetchJson("/api/session?id=" + encodeURIComponent(publicId));
 }
 
 export async function postGame(payload){

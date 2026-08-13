@@ -29,16 +29,28 @@ app/
   layout.jsx        <html>/<body>, metadata, Providers
   providers.jsx     TanStack Query client
   page.jsx          the interactive app: picker / landing / scorer / history / leaderboard
+  not-found.jsx      whole-app 404 — reached in practice via a mistyped/removed /g/[id]
+  g/[id]/
+    page.jsx         the session recap — a Server Component, queries Postgres directly
+    opengraph-image.jsx   share-preview card for the same route, via next/og
+  _lib/
+    format.js        formatDate — shared so the SPA and the recap can't drift
+    mascots.js        the mascot image list — shared for a reason, see "RSC boundaries" below
   _state/
     useTally.js     the reducer that replaced the mutable `S` object
   _components/
     Controls.jsx    renders the control SPECS a descriptor declares (tally, ladder, list, num)
-    Card.jsx        CatBody / CategoryBlock / SumStrip / PlayerCard
+    Card.jsx        CatBody / CategoryBlock / SumStrip / PlayerCard — the LIVE, editable card
+    Recap.jsx        the READ-ONLY recap — deliberately does not reuse Card.jsx's editing chrome
+    ShareButton.jsx   the one client island on the recap page ("use client": clipboard copy)
     Scorer.jsx      the two render modes, review grid, category tab strip
   api/*/route.js    the five route handlers, backed by Neon Postgres (lib/db.mjs, schema.sql)
+lib/
+  db.mjs             getSql(), GAMES, id/name normalizers — unchanged since the port
+  session.mjs         the session+players query, shared by GET /api/session and app/g/[id]/page.jsx
 src/                ← framework-free, and deliberately so
-  scoring.js        pure scoring + makeScorer()
-  api.js            fetchJson + the four /api wrappers
+  scoring.js        pure scoring + makeScorer() + fromDetail() (the recap's reconstruction path)
+  api.js            fetchJson + the client-side /api wrappers
   games/
     index.js        the GAMES registry
     harmonies.js    ← the category-descriptor contract is documented here
@@ -48,6 +60,28 @@ src/                ← framework-free, and deliberately so
     controls.js     control SPECS (data, not markup) + token art + count helpers
     art-7w.js       7 Wonders component art (cards, struck tokens, coins)
 ```
+
+### RSC boundaries: a plain data export from a `"use client"` file is not safe to import server-side
+
+`app/_components/Recap.jsx` (a Server Component — `/g/[id]` renders it with no `"use client"`) used
+to import `MASCOTS` from `Scorer.jsx`, which is `"use client"`. It looked fine — `MASCOTS` is a bare
+array of strings — but on the server it resolved to `undefined`, and `<img src={undefined}>` renders
+with no `src` at all: no error, no broken-image icon, just a blank circle. Next generates a client
+reference for *the whole module* a `"use client"` file exports, not just its component exports, so a
+plain constant doesn't cross that boundary the way it would in an ordinary same-side import.
+
+Nothing catches this except actually rendering the page: `next build` succeeds (this route is
+`force-dynamic`, so nothing is prerendered with real data), and Vitest can't see it either — RTL
+renders straight through `"use client"` with no RSC bundler in the loop, so the bug only exists when
+Next's real server/client split is in play. This is exactly why CLAUDE.md already says to verify UI
+changes in the browser rather than by inspection; it's now also why data any Server Component might
+need (`_lib/format.js`, `_lib/mascots.js`) lives in a plain module neither directive touches, not
+inside a component file that happens to also export it.
+
+The same reasoning applies to *props*, not just imports: `SumStrip` (from `Card.jsx`, `"use client"`)
+is reused by the recap, but only ever handed `{ sums: game.sums }` — never the full `game`
+descriptor, which carries live functions (`cat.points`, `cat.controls`, …) that cannot serialize
+across a server→client prop boundary at all and throw immediately at render.
 
 `public/assets/` holds images. **Asset paths are absolute (`/assets/…`)** — they were relative,
 which breaks the moment a route is not at `/`.

@@ -36,18 +36,24 @@ app/
   _lib/
     format.js        formatDate — shared so the SPA and the recap can't drift
     mascots.js        the mascot image list — shared for a reason, see "RSC boundaries" below
+    photos.js          photo-upload policy constants (cap, size, types) — server AND client need
+                       the same numbers, so this is plain data too, for the same reason
   _state/
     useTally.js     the reducer that replaced the mutable `S` object
   _components/
     Controls.jsx    renders the control SPECS a descriptor declares (tally, ladder, list, num)
     Card.jsx        CatBody / CategoryBlock / SumStrip / PlayerCard — the LIVE, editable card
     Recap.jsx        the READ-ONLY recap — deliberately does not reuse Card.jsx's editing chrome
-    ShareButton.jsx   the one client island on the recap page ("use client": clipboard copy)
+    ShareButton.jsx   client island on the recap page ("use client": clipboard copy)
+    PhotoUpload.jsx   client island on the recap page (board photos — see "Board photos" below)
     Scorer.jsx      the two render modes, review grid, category tab strip
-  api/*/route.js    the five route handlers, backed by Neon Postgres (lib/db.mjs, schema.sql)
+  api/*/route.js    the six route handlers, backed by Neon Postgres (lib/db.mjs, schema.sql)
+                     and, for photo-upload, Vercel Blob (lib/session.mjs, @vercel/blob)
 lib/
   db.mjs             getSql(), GAMES, id/name normalizers — unchanged since the port
-  session.mjs         the session+players query, shared by GET /api/session and app/g/[id]/page.jsx
+  session.mjs         session+players+photos query (shared by GET /api/session and
+                     app/g/[id]/page.jsx) plus the photo-upload helpers app/api/photo-upload
+                     uses to check a session exists and to record a completed upload
 src/                ← framework-free, and deliberately so
   scoring.js        pure scoring + makeScorer() + fromDetail() (the recap's reconstruction path)
   api.js            fetchJson + the client-side /api wrappers
@@ -156,6 +162,40 @@ fromDetail(blob)` reads a row back and returns `{ player, present }`; every cate
 
 **Read [docs/ledger.md](docs/ledger.md) before touching `schema.sql`, `api/*`, or anything that
 writes a score.**
+
+### Board photos (`session_photos`, `@vercel/blob`)
+
+Client-side upload straight to Vercel Blob, never proxied through a route — a phone photo is
+3–8 MB and Vercel Functions cap request bodies at 4.5 MB, so a proxy fails on exactly the photos
+people take. `app/_components/PhotoUpload.jsx` downscales to a ~1600px long edge via canvas before
+uploading (falling back to the original file if `createImageBitmap` isn't available — the server's
+`MAX_PHOTO_BYTES` is the real backstop, not the client downscale), then calls `@vercel/blob/client`'s
+`upload()`, which POSTs to `app/api/photo-upload/route.js` for a token before talking to Blob
+directly.
+
+**`onUploadCompleted` — not a second client call — is what writes the `session_photos` row.** Vercel
+calls it once the bytes have actually landed, independent of whether the tab that started the
+upload is still open; a client-driven "now record this URL" call has a real gap (tab closes right
+after the PUT succeeds, before the second call fires) that this doesn't. It **cannot fire against
+localhost** — verify the persistence half on preview, same as every other DB-backed flow here (see
+"Running it" below). Locally you can still verify token issuance and that bytes really reach Blob;
+you just won't see the row afterward.
+
+There is no login in this app. The honest threat model is a stranger with a real `public_id`, not
+an authenticated bad actor — `onBeforeGenerateToken` checks the session genuinely exists and caps
+photos per session (`MAX_PHOTOS_PER_SESSION` in `app/_lib/photos.js`), which is what stands between
+that and someone filling the store. It does not and cannot stop a stranger who knows a real
+`public_id` from adding a photo to *that* session.
+
+`upload()`'s pathname is chosen by the **client**, not the server — there's no server-side override
+in `@vercel/blob`'s client-upload flow. `onBeforeGenerateToken` validates it starts with
+`sessions/<the-claimed-session's-public-id>/` rather than trusting it, which matters less as a
+defence (it's our own client code, not adversarial input) than as a bug catch: it's what stops one
+session's photo from silently landing in another's folder if that code is ever refactored wrong.
+
+`scripts/sessions.mjs --delete` deletes the actual Blob objects (via `@vercel/blob`'s `del()`)
+before dropping the session row — `session_photos` cascades the *database* row on its own, but the
+image bytes in Blob storage don't go away without an explicit call.
 
 ### Adding a game
 

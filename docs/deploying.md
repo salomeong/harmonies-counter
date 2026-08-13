@@ -64,6 +64,16 @@ preview, `--prod` promotes) — so this only matters if a fresh project is ever 
 `harmonies-counter-gray.vercel.app`, now serving a stale build. Delete it when you're confident
 nothing points at it; until then, don't be confused by a second live copy of the app.
 
+**A Vercel Blob store (`faithful-tally-photos`, public access) is provisioned and linked**, as of
+2026-08-13 — `BLOB_READ_WRITE_TOKEN` is set on Production, Preview and Development, the same way
+`DATABASE_URL` is. Board-photo uploads work locally up to the point of actually landing in Blob
+storage; `onUploadCompleted` (the callback that writes the `session_photos` row) **cannot reach a
+local dev server** — Blob's infrastructure has no route back to your laptop. Verify that half on a
+preview deploy: upload a photo, confirm the row exists (`scripts/sessions.mjs <public_id>`), reload
+the recap page and confirm the photo is still there. `scripts/sessions.mjs --delete` cleans up both
+the database rows and the actual Blob objects — a session's photos don't disappear on their own just
+because the row referencing them does.
+
 ## Git
 
 Remote is `salomeong/harmonies-counter`. The local `maxxyh` identity **has push access** (granted

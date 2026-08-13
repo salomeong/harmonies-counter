@@ -73,17 +73,23 @@ data constant from a `"use client"` file resolves to `undefined` at runtime, sil
 CLAUDE.md's "RSC boundaries" note. It cost a broken mascot image before being caught by browser
 verification; Vitest could not see it, because RTL doesn't model the RSC split at all.
 
-### Photos of finished boards
-`session_photos` exists and is unused. Two constraints decided in advance:
-- **Vercel Blob with client-side upload** (`@vercel/blob/client`) — now a plain import, since the
-  no-bundler constraint that made this awkward went away with the framework migration. Phone photos
-  are 3–8 MB and Vercel Functions cap request bodies at 4.5 MB, so proxying through `/api/*` fails
-  on exactly the photos people take.
-- **The bytes must never reach Postgres** — only the URL. That rule is what keeps the database
-  inside Neon's free tier indefinitely.
-Downscale on-device via canvas (long edge ~1600px) before upload; that also puts roughly 16,000
-photos inside Blob's Hobby allowance. The recap page (`app/g/[id]/page.jsx`) is the natural place to
-both upload to and display from.
+### ~~Photos of finished boards~~ — shipped 2026-08-13
+
+Both constraints decided in advance held up: client-side upload straight to Vercel Blob
+(`@vercel/blob/client`'s `upload()`, now a plain import — the no-bundler constraint that made this
+awkward went away with the framework migration), and the bytes never reach Postgres, only
+`blob_url`. Canvas downscale to a ~1600px long edge before upload, so ~16,000 photos fit inside
+Blob's Hobby allowance. Lives on the recap page (`app/_components/PhotoUpload.jsx`), both the
+upload control and the existing-photo gallery in one client island.
+
+`onUploadCompleted` (not a second client call) writes the `session_photos` row — see CLAUDE.md's
+"Board photos" section for why, and for the honest no-login threat model behind the cap/validation
+in `app/api/photo-upload/route.js`. Verified against the real dev server and real database: token
+issuance, the actual upload landing in Blob storage (fetched the resulting URL back and confirmed
+the bytes), and — since `onUploadCompleted` can't fire against localhost — the cap enforcement was
+proven server-side by seeding six real rows and confirming both the UI hid the add control *and* a
+direct request bypassing the UI was independently rejected with `too_many_photos`. What's only
+provable on a real deployment: the webhook itself landing a row and that row surviving a reload.
 
 ### Recaps and statistics
 Head-to-head records, win rates, "your best science score", how a game went. The session recap this

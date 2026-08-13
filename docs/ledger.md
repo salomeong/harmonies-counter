@@ -57,9 +57,16 @@ would be blocked by data we captured but shaped badly.
 - `sessions.ended_by` supports Duel's supremacy endings, but **the API only accepts `'score'`** —
   nothing in the payload says who won a game that ended with no scores counted, so accepting one
   would write a session with no winner. Thread a `winnerSeat` through before enabling it.
+- **`session_photos` is live as of 2026-08-13** — board photos, uploaded client-side straight to
+  Vercel Blob (see CLAUDE.md's "Board photos" section for the full flow). `blob_url` is the only
+  thing this table stores; the bytes never touch Postgres. `session_player_id` stays NULL for every
+  row today (a photo of the finished board, not of one player's tableau) — nullable specifically so
+  per-seat photos can be added later without a migration, not because anything writes it yet.
 
 `scripts/init-db.mjs` applies `schema.sql`. It strips `--` comments before splitting on `;` —
 the naive split it used to do was broken by a comment that itself contained semicolons, which
 severed a `CREATE TABLE` mid-definition. `scripts/init-db.test.mjs` guards that; it is not
-a general migration tool, and a re-run will not add a column you added later.
+a general migration tool, and a re-run will not add a column you added later — but every statement
+in `schema.sql` is `IF NOT EXISTS`, so a re-run against a database that already has all of them
+(true again after `idx_session_photos_session` was added) is a safe no-op, not destructive.
 

@@ -7,13 +7,16 @@
 // This exists because preview and production share one database by decision (docs/deploying.md),
 // so any end-to-end test of the save flow writes rows a real person will otherwise see. Writing
 // test games is fine; leaving them behind is not, and deleting them by hand in a SQL console is
-// how you delete the wrong one. `session_players` and `session_photos` cascade from `sessions`.
+// how you delete the wrong one. `session_players` and `session_photos` cascade from `sessions` —
+// but that only removes the DATABASE rows; the actual image bytes live in Vercel Blob and don't go
+// away on their own, so --delete also deletes the blob objects themselves before dropping the row.
 //
 // A `people` row deliberately SURVIVES deletion of its sessions: `person_id` is ON DELETE SET NULL
 // and a person is not owned by any one game. Orphaned people are reported so you can see them,
 // not silently removed.
 
 import { neon } from '@neondatabase/serverless';
+import { del } from '@vercel/blob';
 
 if (!process.env.DATABASE_URL){
   console.error('DATABASE_URL is not set. Run with: node --env-file=.env.local scripts/sessions.mjs');
@@ -61,8 +64,23 @@ async function show(publicId){
 
 async function remove(publicIds){
   for (const publicId of publicIds){
-    const rows = await sql`DELETE FROM sessions WHERE public_id = ${publicId} RETURNING public_id`;
-    console.log(rows.length ? `deleted ${publicId} (session_players and session_photos cascaded)` : `${publicId}: not found`);
+    const [session] = await sql`SELECT id FROM sessions WHERE public_id = ${publicId}`;
+    if (!session){ console.log(`${publicId}: not found`); continue; }
+
+    const photos = await sql`SELECT blob_url FROM session_photos WHERE session_id = ${session.id}`;
+    if (photos.length){
+      // Best-effort: a blob that's already gone (or BLOB_READ_WRITE_TOKEN missing locally) must
+      // not block deleting the session row itself.
+      try {
+        await del(photos.map(p => p.blob_url));
+        console.log(`  deleted ${photos.length} blob object(s)`);
+      } catch (err) {
+        console.log(`  warning: couldn't delete ${photos.length} blob object(s): ${err.message}`);
+      }
+    }
+
+    await sql`DELETE FROM sessions WHERE id = ${session.id}`;
+    console.log(`deleted ${publicId} (session_players and session_photos cascaded)`);
   }
   const orphans = await sql`
     SELECT pe.name_key FROM people pe

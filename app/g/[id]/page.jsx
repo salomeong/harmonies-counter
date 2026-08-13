@@ -10,6 +10,7 @@ import { getGame } from "@/src/games/index.js";
 import { makeScorer } from "@/src/scoring.js";
 import { RecapHeader, RecapPlayers } from "@/app/_components/Recap.jsx";
 import { ShareButton } from "@/app/_components/ShareButton.jsx";
+import { PhotoUpload } from "@/app/_components/PhotoUpload.jsx";
 import { formatDate } from "@/app/_lib/format.js";
 
 // Reads process.env.DATABASE_URL through the lazy getSql() inside lib/session.mjs — force-dynamic
@@ -68,6 +69,10 @@ export default async function SessionPage({ params }){
       </div>
       <RecapHeader game={game} session={session} />
       <RecapPlayers game={game} scorer={scorer} restored={restored} />
+      {/* Existing photo URLs are plain strings — safe to pass straight across the server→client
+          boundary; nothing here carries a function the way a game descriptor would (see CLAUDE.md's
+          "RSC boundaries" note). */}
+      <PhotoUpload sessionPublicId={session.publicId} existingPhotos={session.photos.map(p => p.blobUrl)} />
       <div className="citation-footer">
         Benvenuto, J. (2024). Harmonies [Board game]. Libellud.<br />
         Goupy, J., &amp; Lebrat, C. (2023). Faraway [Board game]. Catch Up Games.<br />

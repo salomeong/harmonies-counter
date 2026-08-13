@@ -1394,3 +1394,98 @@
   .recap-untracked .tok-dot{
     box-shadow: none;
   }
+
+  /* ---- board photos ----
+     Photos of the physical board tucked into the scorepad like Polaroids paperclipped to a page —
+     a printed thing sitting on top of the layout, not a UI widget. That's why the frame is a fixed
+     cream tone rather than var(--card): a photo print stays paper-coloured in dark mode too, the
+     same way a real photo would on a dark table. */
+  .photo-section{
+    max-width: 640px;
+    margin: 22px auto 0;
+  }
+  .photo-section-title{
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--ink);
+    padding: 0 4px;
+    margin-bottom: 2px;
+  }
+  .photo-strip{
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    overflow-x: auto;
+    padding: 12px 4px 16px;
+    scroll-snap-type: x proximity;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Alternating tilt so the strip reads as photos someone actually dropped in, not a grid. */
+  .photo-strip > :nth-child(3n+1){ --tilt: -3deg; }
+  .photo-strip > :nth-child(3n+2){ --tilt: 2.5deg; }
+  .photo-strip > :nth-child(3n){ --tilt: -1.5deg; }
+
+  .photo-frame{
+    flex: 0 0 auto;
+    width: 96px;
+    background: #fbf6e9;
+    border-radius: 3px;
+    padding: 6px 6px 16px;
+    box-shadow: 0 3px 8px rgba(30,20,5,0.22), 0 1px 2px rgba(30,20,5,0.14);
+    transform: rotate(var(--tilt, 0deg));
+    scroll-snap-align: start;
+  }
+  .photo-frame img{
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 2px;
+    background: var(--bg);
+  }
+  .photo-add{
+    flex: 0 0 auto;
+    width: 96px;
+    height: 96px;
+    margin-top: 6px;
+    border: 1.5px dashed var(--line);
+    border-radius: 3px;
+    background: transparent;
+    color: var(--accent-text);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transform: rotate(var(--tilt, 0deg));
+    transition: transform 0.12s ease, border-color 0.15s ease;
+  }
+  @media (hover: hover){
+    .photo-add:hover{ border-color: var(--accent-text); }
+  }
+  .photo-add:active{
+    transform: rotate(var(--tilt, 0deg)) scale(0.96);
+  }
+  .photo-add.busy{
+    cursor: default;
+    opacity: 0.7;
+  }
+  .photo-spinner{
+    width: 22px;
+    height: 22px;
+    border: 2.5px solid var(--line);
+    border-top-color: var(--accent-text);
+    border-radius: 50%;
+    animation: photo-spin 0.8s linear infinite;
+  }
+  @keyframes photo-spin{ to{ transform: rotate(360deg); } }
+  .photo-cap-note{
+    font-size: 0.76rem;
+    color: var(--muted);
+    padding: 0 4px;
+  }
+  .photo-error{
+    font-size: 0.8rem;
+    color: var(--red);
+    font-weight: 600;
+    padding: 2px 4px 0;
+  }

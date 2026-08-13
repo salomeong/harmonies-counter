@@ -1,6 +1,9 @@
 -- Session-centric ledger. Replaces the old profiles/games pair, where two people at the same
 -- table produced two unrelated rows (no session, no opponents, no per-category detail, no URL).
--- All existing data is disposable — this is a clean drop-and-recreate, no backfill.
+--
+-- Every statement below is CREATE TABLE/INDEX IF NOT EXISTS — re-running this file is additive,
+-- not destructive, and safe against the real production data the ledger now holds (its first game
+-- was saved 2026-08-13). Only `games`/`profiles`, retired before this schema shipped, are dropped.
 --
 -- scripts/init-db.mjs splits this file on ';' and runs each statement individually — keep every
 -- statement ';'-terminated and avoid ';' inside string literals or function bodies.
@@ -48,6 +51,7 @@ CREATE TABLE IF NOT EXISTS session_photos (
 CREATE INDEX IF NOT EXISTS idx_sessions_game_played ON sessions (game_key, played_at DESC);
 CREATE INDEX IF NOT EXISTS idx_session_players_person ON session_players (person_id);
 CREATE INDEX IF NOT EXISTS idx_session_players_session ON session_players (session_id);
+CREATE INDEX IF NOT EXISTS idx_session_photos_session ON session_photos (session_id);
 
 -- high_score is deliberately NOT stored anywhere. It is derived (MAX(total_score)), so it cannot
 -- drift out of sync with the sessions that produced it.

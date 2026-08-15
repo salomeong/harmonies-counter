@@ -1,6 +1,6 @@
-// POST /api/save-game — the one atomic write in the app. A session (the whole table's result) is
-// recorded in a single sql.transaction() so the people upsert, the session row and every player's
-// row either all land or none do — no partial ledger entries.
+// POST /api/save-game — the one atomic score write in the app. The first request creates a session;
+// later requests carrying its publicId preserve that session/share URL and replace its player rows.
+// Both paths use one sql.transaction(), so people/session/player changes all land or none do.
 //
 // The neon HTTP driver has no interactive transactions (no mid-transaction round trip to read back
 // an inserted id), so `public_id` is generated here in the handler BEFORE the transaction starts,
@@ -11,7 +11,8 @@
 // `people` row and therefore show up in leaderboards/history; unnamed/default-named players still
 // get a session_players row with person_id = NULL.
 import { NextResponse } from 'next/server';
-import { getSql, normalizeName, isDefaultName, normalizeGame, normalizeEndedBy, makePublicId } from '../../../lib/db.mjs';
+import { getSql, normalizeName, isDefaultName, normalizeGame, normalizeEndedBy, makePublicId,
+         PUBLIC_ID_ALPHABET, PUBLIC_ID_LENGTH } from '../../../lib/db.mjs';
 
 // This route reads process.env.DATABASE_URL through the lazy getSql() below — force-dynamic keeps
 // Next from trying to evaluate (and cache) it at `next build` time, when there is no database.
@@ -35,6 +36,10 @@ function validate(body) {
   const variant = (body?.variant && typeof body.variant === 'object' && !Array.isArray(body.variant))
     ? body.variant
     : {};
+
+  const requestedPublicId = typeof body?.publicId === 'string' ? body.publicId.trim() : '';
+  const publicIdPattern = new RegExp(`^[${PUBLIC_ID_ALPHABET}]{${PUBLIC_ID_LENGTH}}$`);
+  if (requestedPublicId && !publicIdPattern.test(requestedPublicId)) errors.push('invalid_public_id');
 
   const rawPlayers = Array.isArray(body?.players) ? body.players : null;
   if (!rawPlayers || rawPlayers.length === 0) errors.push('missing_players');
@@ -80,7 +85,7 @@ function validate(body) {
     });
   }
 
-  return { game, endedBy, variant, players, errors };
+  return { game, endedBy, variant, players, requestedPublicId, errors };
 }
 
 export async function POST(request) {
@@ -96,7 +101,7 @@ export async function POST(request) {
     body = undefined;
   }
 
-  const { game, endedBy, variant, players, errors } = validate(body);
+  const { game, endedBy, variant, players, requestedPublicId, errors } = validate(body);
   if (errors.length) {
     return NextResponse.json({ error: 'invalid_request', details: errors }, { status: 400 });
   }
@@ -107,6 +112,18 @@ export async function POST(request) {
     // `server_error` JSON response as every other failure here, instead of escaping as an
     // unhandled rejection. It still throws at call time, not at module load.
     const sql = getSql();
+
+    // Supplying the id returned by a previous save turns this write into an update. Keep the
+    // session row itself so its recap URL and session-level photos remain attached; only the
+    // mutable score snapshot is replaced below.
+    if (requestedPublicId) {
+      const existing = await sql`
+        SELECT id FROM sessions WHERE public_id = ${requestedPublicId} AND game_key = ${game}
+      `;
+      if (!existing.length) {
+        return NextResponse.json({ error: 'session_not_found' }, { status: 404 });
+      }
+    }
 
     // ---- Named players: dedupe by name_key up front ----
     // A single INSERT ... ON CONFLICT can't affect the same conflict target twice, so two players
@@ -136,6 +153,7 @@ export async function POST(request) {
         JOIN session_players sp ON sp.person_id = pe.id
         JOIN sessions s ON s.id = sp.session_id
         WHERE pe.name_key = ANY(${peopleKeys}::text[]) AND s.game_key = ${game}
+          AND (${requestedPublicId || null}::text IS NULL OR s.public_id <> ${requestedPublicId || null})
         GROUP BY pe.name_key
       `;
       previousHighByKey = new Map(rows.map(r => [r.key, r.highScore == null ? null : Number(r.highScore)]));
@@ -153,41 +171,52 @@ export async function POST(request) {
     const isWinners = players.map(p => endedBy === 'score' && p.total === maxTotal);
     const detailsJson = players.map(p => JSON.stringify(p.detail));
 
-    let publicId;
+    let publicId = requestedPublicId || null;
     const MAX_ATTEMPTS = 5;
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      publicId = makePublicId();
+      if (!requestedPublicId) publicId = makePublicId();
       try {
-        await sql.transaction([
+        const playerWrite = sql`
+          INSERT INTO session_players (session_id, person_id, seat, display_name, total_score, is_winner, detail)
+          SELECT s.id, pe.id, x.seat, x.display_name, x.total, x.is_winner, x.detail::jsonb
+          FROM sessions s
+          CROSS JOIN unnest(
+            ${seats}::smallint[],
+            ${nameKeys}::text[],
+            ${displayNames}::text[],
+            ${totals}::integer[],
+            ${isWinners}::boolean[],
+            ${detailsJson}::text[]
+          ) AS x(seat, name_key, display_name, total, is_winner, detail)
+          LEFT JOIN people pe ON pe.name_key = x.name_key
+          WHERE s.public_id = ${publicId}
+        `;
+        const writes = [
           sql`
             INSERT INTO people (name_key, display_name)
             SELECT * FROM unnest(${peopleKeys}::text[], ${peopleNames}::text[])
             ON CONFLICT (name_key) DO UPDATE SET display_name = EXCLUDED.display_name
-          `,
-          sql`
+          `
+        ];
+        if (requestedPublicId) {
+          writes.push(
+            sql`UPDATE sessions SET variant = ${JSON.stringify(variant)}::jsonb, ended_by = ${endedBy}
+                WHERE public_id = ${publicId}`,
+            sql`DELETE FROM session_players
+                WHERE session_id = (SELECT id FROM sessions WHERE public_id = ${publicId})`,
+            playerWrite
+          );
+        } else {
+          writes.push(sql`
             INSERT INTO sessions (public_id, game_key, rules_version, variant, ended_by)
             VALUES (${publicId}, ${game}, 1, ${JSON.stringify(variant)}::jsonb, ${endedBy})
-          `,
-          sql`
-            INSERT INTO session_players (session_id, person_id, seat, display_name, total_score, is_winner, detail)
-            SELECT s.id, pe.id, x.seat, x.display_name, x.total, x.is_winner, x.detail::jsonb
-            FROM sessions s
-            CROSS JOIN unnest(
-              ${seats}::smallint[],
-              ${nameKeys}::text[],
-              ${displayNames}::text[],
-              ${totals}::integer[],
-              ${isWinners}::boolean[],
-              ${detailsJson}::text[]
-            ) AS x(seat, name_key, display_name, total, is_winner, detail)
-            LEFT JOIN people pe ON pe.name_key = x.name_key
-            WHERE s.public_id = ${publicId}
-          `
-        ]);
+          `, playerWrite);
+        }
+        await sql.transaction(writes);
         break; // success
       } catch (err) {
         const isPublicIdCollision = err && err.code === '23505' && /public_id/.test(String(err.detail || err.message || ''));
-        if (isPublicIdCollision && attempt < MAX_ATTEMPTS) continue;
+        if (!requestedPublicId && isPublicIdCollision && attempt < MAX_ATTEMPTS) continue;
         throw err;
       }
     }
@@ -210,7 +239,7 @@ export async function POST(request) {
       }
     }
 
-    return NextResponse.json({ publicId, saved, celebrations }, { status: 200 });
+    return NextResponse.json({ publicId, saved, celebrations, updated: !!requestedPublicId }, { status: 200 });
   } catch (err) {
     console.error('POST /api/save-game failed:', err);
     return NextResponse.json({ error: 'server_error' }, { status: 500 });

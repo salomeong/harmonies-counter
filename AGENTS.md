@@ -50,7 +50,8 @@ app/
     Recap.jsx        the READ-ONLY recap — deliberately does not reuse Card.jsx's editing chrome
     ShareButton.jsx   client island on the recap and stats pages ("use client": clipboard copy)
     NavIcon.jsx       shared stroked-SVG wayfinding icons; navigation never relies on OS emoji
-    PhotoUpload.jsx   client island on the recap page (board photos — see "Board photos" below)
+    PhotoUpload.jsx   scorer/recap photo tray (staging, captions, direct upload, lightbox)
+    ConfirmDialog.jsx themed destructive-action confirmation for new-game/player reset
     Stats.jsx          win-rate bars, head-to-head rows, category-best rows — see "Stats" below
     Scorer.jsx      the two render modes, review grid, category tab strip
   api/*/route.js    the six route handlers, backed by Neon Postgres (lib/db.mjs, schema.sql)
@@ -162,6 +163,11 @@ A saved game is a **session**, not a row per player — `sessions` + `session_pl
 `session_photos`). `session_players.detail` holds the **raw entered state** from `scorer.detail(p)`,
 never derived points, and `total_score` is authoritative and never recomputed from it.
 
+The first Save creates the session and returns its `public_id`; later saves from that live scorer
+send the same id and **update the session instead of inserting another one**. The session row stays
+put (so its recap URL and photos survive), while `session_players` is deleted/reinserted atomically
+to reflect added, removed, renamed and rescored seats. “New game” clears that id and creates anew.
+
 Raw entered state includes **typed whole-category totals**, stored under the reserved `_totals` key
 — they are what the human typed, and they are not recoverable from the tally fields. `scorer.
 fromDetail(blob)` reads a row back and returns `{ player, present }`; every category declaring
@@ -172,6 +178,11 @@ fromDetail(blob)` reads a row back and returns `{ player, present }`; every cate
 writes a score.**
 
 ### Board photos (`session_photos`, `@vercel/blob`)
+
+Photos can be staged **while tallying**, before a session exists. `PhotoUpload` holds local object
+URLs and optional captions; after Save returns the new `public_id`, it uploads staged files
+automatically. Starting a new game remounts the tray and discards unsaved staged files. Recap and
+scorer thumbnails open the same in-theme `<dialog>` lightbox.
 
 Client-side upload straight to Vercel Blob, never proxied through a route — a phone photo is
 3–8 MB and Vercel Functions cap request bodies at 4.5 MB, so a proxy fails on exactly the photos
@@ -184,7 +195,9 @@ directly.
 **`onUploadCompleted` — not a second client call — is what writes the `session_photos` row.** Vercel
 calls it once the bytes have actually landed, independent of whether the tab that started the
 upload is still open; a client-driven "now record this URL" call has a real gap (tab closes right
-after the PUT succeeds, before the second call fires) that this doesn't. It **cannot fire against
+after the PUT succeeds, before the second call fires) that this doesn't. Optional captions
+(trimmed, 240 characters max) travel in the signed token payload and are written in that same
+callback, so URL and caption cannot split. It **cannot fire against
 localhost** — verify the persistence half on preview, same as every other DB-backed flow here (see
 "Running it" below). Locally you can still verify token issuance and that bytes really reach Blob;
 you just won't see the row afterward.
@@ -356,8 +369,21 @@ edge case — on the formula categories (science, treasury) it is the fast way t
   left as a bar containing one lone button.
 - `waterSide` is per-game state, so a second game with its own variant toggle cannot collide with
   Harmonies' River/Islands state.
+- The game-picker destination is always named **Home**, including the tappable masthead; avoid the
+  old implementation-shaped label "Switch game".
+- Destructive confirmations use the parchment `ConfirmDialog`, never `window.confirm`.
+- Faraway defaults to `guidedReveal`: one traveller at a time, Region cards 8→1, then Sanctuaries,
+  traveller review, and finally the all-player review. The progress trail is the physical journey,
+  not decorative step numbering. Its Full scorecard toggle preserves card-by-card and direct-total
+  entry as the fast path. Keep this descriptor-driven (`game.guidedReveal`), never a game-key branch.
+- The scorer’s return to the selected game landing page is **Game home**, not “Switch player”;
+  names and seats remain editable in the scorer, so there is no separate setup gate.
 
 ## Design rules that are load-bearing
+
+**Orange (`--accent: #e0871f`) is the site accent; green is game/component ink.** The first tracked
+stylesheet already used this split. `--accent-text` is contrast-safe burnt orange in light mode
+and pale orange in dark mode; do not promote green action text back into the brand role.
 
 **Points are always in a blob; counts never are.** This mirrors the physical components, where
 every point value sits in a coloured bubble. `.pip` = points (token values, category scores,

@@ -66,6 +66,7 @@ test('harmonies declares all seven categories in the documented order', () => {
 test('faraway declares its two categories and no sums', () => {
   assert.deepEqual(faraway.cats.map(c => c.key), ['region', 'sanctuary']);
   assert.equal(faraway.sums, undefined);
+  assert.equal(faraway.guidedReveal, true);
 });
 
 test('sevenwonders declares all seven categories in the printed scorepad order, and no sums', () => {

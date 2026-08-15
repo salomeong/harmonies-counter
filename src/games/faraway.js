@@ -14,7 +14,8 @@ import { numberList } from "../ui/controls.js";
 // Region and Sanctuary are the same shape: a repeatable list of typed fame values, summed. Like
 // Harmonies' animal cards, a typed total has no unique inverse (13 fame could be one card or
 // several), so there is no `infer` — the UI never freezes an override here in the first place,
-// since Faraway has no "Enter total" control at all.
+// Card-by-card entry remains useful for checking the reveal; the flat category view also offers
+// direct total entry for players who have already done the arithmetic.
 function fameCat({ key, field, label, hint }){
   return {
     key,
@@ -25,8 +26,8 @@ function fameCat({ key, field, label, hint }){
     points: p => p[field].reduce((sum, v) => sum + numOf(v), 0),
     controls: p => [numberList({
       playerId: p.id, cat: key, values: p[field], uidPrefix: "fa-",
-      rowHint: "fame from this card",
-      addLabel: "+ Add card"
+      rowHint: key === "region" ? "fame on the next revealed card" : "sanctuary fame",
+      addLabel: key === "region" ? "+ Add next revealed card" : "+ Add sanctuary"
     })],
     infer: null,
     detail: p => p[field].map(numOf),
@@ -43,14 +44,14 @@ function fameCat({ key, field, label, hint }){
 // existing screen asked for.
 const region = fameCat({
   key: "region", field: "regionFame",
-  label: "🗺️ Region cards",
-  hint: "Reveal right to left; enter each card's fame if its prerequisite is met"
+  label: "Region cards",
+  hint: "Start at the rightmost card and travel left. Add fame only when its prerequisite is met."
 });
 
 const sanctuary = fameCat({
   key: "sanctuary", field: "sanctuaryFame",
-  label: "⛩️ Sanctuaries",
-  hint: "Scored after all Region cards, same way"
+  label: "Sanctuaries",
+  hint: "Score these after all eight Region cards have been revealed."
 });
 
 export const faraway = {
@@ -59,11 +60,12 @@ export const faraway = {
   logo: "/assets/faraway-logo.png",
   tileArt: "/assets/faraway-tile-art.jpg",
   tagline: "Journey home, reveal your fame",
-  subtitle: "Reveal your cards right to left, add up the fame",
+  subtitle: "Journey home: reveal right to left, then score Sanctuaries",
   minPlayers: 1,
   maxPlayers: 6,
   accordion: false,     // no collapsible drawers — both categories are always visible
   categoryMode: false,  // no Player / Category toggle
+  guidedReveal: true,   // default to the physical right-to-left journey; full scorecard remains available
   critters: false,      // no corner mascots
   mascots: false,        // no per-player mascot in the card header
   waterToggle: false,   // no River / Islands toggle — Faraway has no water category

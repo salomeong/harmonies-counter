@@ -76,7 +76,7 @@ export default async function SessionPage({ params, searchParams }){
       {/* Existing photo URLs are plain strings — safe to pass straight across the server→client
           boundary; nothing here carries a function the way a game descriptor would (see CLAUDE.md's
           "RSC boundaries" note). */}
-      <PhotoUpload sessionPublicId={session.publicId} existingPhotos={session.photos.map(p => p.blobUrl)} />
+      <PhotoUpload sessionPublicId={session.publicId} existingPhotos={session.photos} />
       <div className="citation-footer">
         Benvenuto, J. (2024). Harmonies [Board game]. Libellud.<br />
         Goupy, J., &amp; Lebrat, C. (2023). Faraway [Board game]. Catch Up Games.<br />

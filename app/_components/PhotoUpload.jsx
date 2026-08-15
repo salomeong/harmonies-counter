@@ -1,117 +1,115 @@
 "use client";
 
-// The whole board-photos section — existing photos plus the add control — lives in one client
-// component rather than splitting "display existing" (server) from "add new" (client). Existing
-// photo URLs are plain strings, so there's nothing gained by keeping them server-rendered, and
-// keeping the section together means the "you're at the cap" and "here's an error" states only
-// have to be computed in one place against one combined list.
-//
-// Uploaded-this-tab photos are optimistic and client-only: onUploadCompleted (app/api/photo-upload/
-// route.js) is what actually writes the session_photos row, arriving via Vercel's own webhook
-// independent of this tab's lifetime. A reload before that lands would (very briefly) not show a
-// just-added photo — an accepted gap, not silently papered over; see docs/deploying.md on why the
-// webhook, not a second client call, is the source of truth.
-
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import { MAX_PHOTOS_PER_SESSION } from "@/app/_lib/photos.js";
 
-// createImageBitmap can fail (unsupported browser, corrupt file) — a browser that can't
-// decode/re-encode client-side still gets to upload the original; MAX_PHOTO_BYTES server-side is
-// the backstop for that case, not this function.
 async function downscale(file, maxEdge = 1600, quality = 0.85){
   try {
     const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
     const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
-    const w = Math.round(bitmap.width * scale);
-    const h = Math.round(bitmap.height * scale);
     const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
-    canvas.getContext("2d").drawImage(bitmap, 0, 0, w, h);
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     bitmap.close?.();
-    return await new Promise((resolve, reject) => {
-      canvas.toBlob(b => (b ? resolve(b) : reject(new Error("encode_failed"))), "image/jpeg", quality);
-    });
-  } catch {
-    return file;
-  }
+    return await new Promise((resolve, reject) => canvas.toBlob(
+      blob => blob ? resolve(blob) : reject(new Error("encode_failed")), "image/jpeg", quality
+    ));
+  } catch { return file; }
 }
 
 function CameraIcon(){
-  return (
-    <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
-      <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"
-            fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-      <circle cx="12" cy="14" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
+  return <svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
+    <path d="M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+    <circle cx="12" cy="14" r="3.6" fill="none" stroke="currentColor" strokeWidth="1.6" />
+  </svg>;
 }
 
-export function PhotoUpload({ sessionPublicId, existingPhotos }){
-  const [uploaded, setUploaded] = useState([]);
-  const [busy, setBusy] = useState(false);
+// With no session id, files stay in the browser while scores are entered. Once save returns an id,
+// the same component uploads every staged photo directly to Blob and carries its caption through
+// the upload token to the completion webhook.
+export function PhotoUpload({ sessionPublicId, existingPhotos = [] }){
+  const [photos, setPhotos] = useState(() => existingPhotos.map(p => typeof p === "string"
+    ? { id: p, url: p, caption: "", status: "saved" }
+    : { id: p.id || p.blobUrl, url: p.blobUrl, caption: p.caption || "", status: "saved" }));
   const [error, setError] = useState(null);
+  const [preview, setPreview] = useState(null);
   const inputRef = useRef(null);
+  const previewRef = useRef(null);
+  const uploading = useRef(new Set());
 
-  const allPhotos = [...existingPhotos, ...uploaded];
-  const atCap = allPhotos.length >= MAX_PHOTOS_PER_SESSION;
+  useEffect(() => {
+    if (preview && previewRef.current && !previewRef.current.open) previewRef.current.showModal();
+    if (!preview && previewRef.current?.open) previewRef.current.close();
+  }, [preview]);
 
-  async function onFile(e){
-    const file = e.target.files?.[0];
-    e.target.value = ""; // lets the same file be re-picked after an error
-    if (!file) return;
+  useEffect(() => {
+    if (!sessionPublicId) return;
+    photos.filter(p => p.status === "staged" && !uploading.current.has(p.id)).forEach(async photo => {
+      uploading.current.add(photo.id);
+      setPhotos(all => all.map(p => p.id === photo.id ? { ...p, status: "uploading" } : p));
+      try {
+        const bytes = await downscale(photo.file);
+        const blob = await upload(`sessions/${sessionPublicId}/${crypto.randomUUID()}.jpg`, bytes, {
+          access: "public", handleUploadUrl: "/api/photo-upload", contentType: "image/jpeg",
+          clientPayload: JSON.stringify({ sessionPublicId, caption: photo.caption })
+        });
+        URL.revokeObjectURL(photo.url);
+        setPhotos(all => all.map(p => p.id === photo.id
+          ? { ...p, url: blob.url, file: undefined, status: "saved" } : p));
+      } catch {
+        setPhotos(all => all.map(p => p.id === photo.id ? { ...p, status: "failed" } : p));
+        setError("One photo couldn't upload. Try it again.");
+      } finally { uploading.current.delete(photo.id); }
+    });
+  }, [sessionPublicId, photos]);
 
-    setBusy(true);
-    setError(null);
-    try {
-      const bytes = await downscale(file);
-      const pathname = `sessions/${sessionPublicId}/${crypto.randomUUID()}.jpg`;
-      const blob = await upload(pathname, bytes, {
-        access: "public",
-        handleUploadUrl: "/api/photo-upload",
-        contentType: "image/jpeg",
-        clientPayload: JSON.stringify({ sessionPublicId })
-      });
-      setUploaded(u => [...u, blob.url]);
-    } catch {
-      setError("Couldn't upload that photo — try again.");
-    } finally {
-      setBusy(false);
-    }
+  function onFile(e){
+    const files = [...(e.target.files || [])].slice(0, MAX_PHOTOS_PER_SESSION - photos.length);
+    e.target.value = "";
+    setPhotos(all => [...all, ...files.map(file => ({
+      id: crypto.randomUUID(), file, url: URL.createObjectURL(file), caption: "", status: "staged"
+    }))]);
   }
 
-  return (
-    <div className="photo-section">
-      <div className="photo-section-title">📷 Board photos</div>
-      <div className="photo-strip">
-        {allPhotos.map(url => (
-          <div className="photo-frame" key={url}>
-            <img src={url} alt="" loading="lazy" />
-          </div>
-        ))}
-        {!atCap ? (
-          <button
-            type="button"
-            className={"photo-add" + (busy ? " busy" : "")}
-            disabled={busy}
-            onClick={() => inputRef.current?.click()}
-            aria-label="Add a photo of the board"
-          >
-            {busy ? <span className="photo-spinner" aria-hidden="true" /> : <CameraIcon />}
-          </button>
-        ) : null}
-      </div>
-      {atCap ? <div className="photo-cap-note">Up to {MAX_PHOTOS_PER_SESSION} photos per game</div> : null}
-      {error ? <div className="photo-error">{error}</div> : null}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        onChange={onFile}
-        style={{ display: "none" }}
-      />
+  const busy = photos.some(p => p.status === "uploading");
+  const atCap = photos.length >= MAX_PHOTOS_PER_SESSION;
+
+  return <section className="photo-section tally-photos" aria-labelledby="board-photos-title">
+    <div className="photo-section-heading">
+      <div><div className="photo-section-title" id="board-photos-title">Board photos</div>
+        <div className="photo-section-subtitle">Capture the board now; photos attach when you save.</div></div>
+      {!atCap ? <button type="button" className="photo-add photo-add-text" onClick={() => inputRef.current?.click()}>
+        <CameraIcon /> Add photo
+      </button> : null}
     </div>
-  );
+    {photos.length ? <div className="photo-strip">
+      {photos.map(photo => <figure className="photo-frame" key={photo.id}>
+        <button className="photo-preview" onClick={() => setPreview(photo)} aria-label="Expand board photo">
+          <img src={photo.url} alt={photo.caption || "Board photo"} />
+          {photo.status === "uploading" ? <span className="photo-spinner" aria-label="Uploading" /> : null}
+        </button>
+        {photo.status !== "saved" ? <input className="photo-caption-input" value={photo.caption}
+          maxLength={240} placeholder="Add a caption…" aria-label="Photo caption" disabled={photo.status === "uploading"}
+          onChange={e => setPhotos(all => all.map(p => p.id === photo.id ? { ...p, caption: e.target.value } : p))} />
+          : photo.caption ? <figcaption>{photo.caption}</figcaption> : null}
+        {photo.status === "failed" ? <button className="photo-retry" onClick={() => {
+          setError(null); setPhotos(all => all.map(p => p.id === photo.id ? { ...p, status: "staged" } : p));
+        }}>Retry upload</button> : null}
+      </figure>)}
+    </div> : <button type="button" className="photo-empty" onClick={() => inputRef.current?.click()}>
+      <CameraIcon /><span><b>Keep the finished board with the score</b><small>Take a photo or choose one from your library</small></span>
+    </button>}
+    {busy ? <div className="photo-cap-note">Uploading photos…</div> : null}
+    {atCap ? <div className="photo-cap-note">Up to {MAX_PHOTOS_PER_SESSION} photos per game</div> : null}
+    {error ? <div className="photo-error">{error}</div> : null}
+    <input ref={inputRef} type="file" accept="image/*" capture="environment" multiple onChange={onFile} hidden />
+    <dialog ref={previewRef} className="photo-lightbox" onCancel={() => setPreview(null)}
+      onClick={e => { if (e.target === previewRef.current) setPreview(null); }}>
+      {preview ? <div><button className="lightbox-close" onClick={() => setPreview(null)} aria-label="Close photo">×</button>
+        <img src={preview.url} alt={preview.caption || "Expanded board photo"} />
+        {preview.caption ? <p>{preview.caption}</p> : null}</div> : null}
+    </dialog>
+  </section>;
 }

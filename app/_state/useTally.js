@@ -155,7 +155,7 @@ function reducer(state, a){
   }
 }
 
-export function useTally(){
+export function useTally(requestConfirm = details => details.action()){
   const [state, dispatch] = useReducer(reducer, undefined, initialState);
 
   const game = state.activeGame ? getGame(state.activeGame) : null;
@@ -181,12 +181,17 @@ export function useTally(){
     openCat:     cat => dispatch({ type: "openCat", id, cat }),
     toggleAll:   () => dispatch({ type: "toggleAll", id, allKeys: scorer.keys }),
     resetCat:    cat => dispatch({ type: "resetCat", id, cat, scorer }),
-    resetPlayer: () => { if (confirm("Reset every category for this player?")) dispatch({ type: "resetPlayer", id, scorer }); },
+    resetPlayer: () => requestConfirm({
+      title: "Reset this player?",
+      message: "Every category for this player will return to zero.",
+      confirmLabel: "Reset player",
+      action: () => dispatch({ type: "resetPlayer", id, scorer })
+    }),
     toTotal:     cat => dispatch({ type: "toTotal", id, cat, scorer }),
     revert:      cat => dispatch({ type: "revert", id, cat }),
     totalInput:  (cat, value) => dispatch({ type: "totalInput", id, cat, value }),
     totalCommit: (cat, value) => dispatch({ type: "totalCommit", id, cat, value, scorer })
-  }), [scorer]);
+  }), [scorer, requestConfirm]);
 
   return { state, dispatch, game, gs, scorer, variant, handlersFor, games: GAME_LIST };
 }

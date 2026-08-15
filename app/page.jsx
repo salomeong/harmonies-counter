@@ -6,20 +6,27 @@
 // keys off them (`.view.active`, and `#view-scorer[data-game="7wonders"]` is how a game restyles
 // its own pips). The port is meant to be visually a no-op.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { useTally } from "./_state/useTally.js";
 import { Scorer } from "./_components/Scorer.jsx";
 import { NavIcon } from "./_components/NavIcon.jsx";
+import { ConfirmDialog } from "./_components/ConfirmDialog.jsx";
+import { PhotoUpload } from "./_components/PhotoUpload.jsx";
 import { fetchProfiles, fetchProfile, fetchLeaderboard, postGame } from "@/src/api.js";
 import { formatDate } from "./_lib/format.js";
 import { restoreDestination } from "./_lib/navigation.js";
 
 export default function Page(){
-  const { state, dispatch, game, gs, scorer, variant, handlersFor, games } = useTally();
+  const [confirmation, setConfirmation] = useState(null);
+  const [photoKey, setPhotoKey] = useState(0);
+  const [savedSessions, setSavedSessions] = useState({});
+  const requestConfirm = useCallback(details => setConfirmation(details), []);
+  const { state, dispatch, game, gs, scorer, variant, handlersFor, games } = useTally(requestConfirm);
   const [nameDraft, setNameDraft] = useState("");
   const view = state.view;
+  const savedPublicId = state.activeGame ? savedSessions[state.activeGame] : null;
 
   // showRules is persisted, but reading localStorage during render would make the server and
   // client markup disagree — so it lands after mount instead.
@@ -63,6 +70,7 @@ export default function Page(){
   // row — the ledger needs a row per seat or the session misrepresents who was at the table.
   const save = useMutation({
     mutationFn: () => postGame({
+      publicId: savedPublicId || undefined,
       game: state.activeGame,
       endedBy: "score",
       variant,
@@ -72,7 +80,8 @@ export default function Page(){
         total: scorer.total(p),
         detail: scorer.detail(p)
       }))
-    })
+    }),
+    onSuccess: data => setSavedSessions(all => ({ ...all, [state.activeGame]: data.publicId }))
   });
 
   function startScorer(name){
@@ -94,11 +103,11 @@ export default function Page(){
         <div className={"logo-wrap" + (view === "picker" ? " hidden" : "")}>
           {/* The masthead is the one-tap way home from inside a game. Per-game scores survive the
               trip (state is kept per game), so this is navigation, not a reset. */}
-          <button className="masthead-home" title="Switch game"
-                  aria-label="Switch game — back to the game picker"
+          <button className="masthead-home" title="Home"
+                  aria-label="Home — back to the game picker"
                   onClick={() => dispatch({ type: "setView", view: "picker" })}>
             <img src={game ? game.logo : "/assets/logo.png"} alt={game ? game.label : "Harmonies"} />
-            <span><NavIcon name="game" /> Switch game</span>
+            <span><NavIcon name="game" /> Home</span>
           </button>
         </div>
 
@@ -119,7 +128,7 @@ export default function Page(){
 
         {/* ---- Landing ---- */}
         <div className={"view" + (view === "landing" ? " active" : "")} id="view-landing">
-          <div className="subtitle">Who&apos;s tallying tonight?</div>
+          <div className="subtitle">{game ? `${game.label} game home` : "Game home"}</div>
           <div className="landing-card">
             <div className="landing-row">
               <input type="text" placeholder="Your name" autoComplete="off"
@@ -146,7 +155,7 @@ export default function Page(){
               <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "scorer" })}><NavIcon name="tally" /> Tally without a name</button>
               <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "leaderboard" })}><NavIcon name="trophy" /> Leaderboard</button>
               {state.activeGame ? <Link href={`/stats/${state.activeGame}`} className="nav-action"><NavIcon name="chart" /> Stats</Link> : null}
-              <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "picker" })}><NavIcon name="game" /> Switch game</button>
+              <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "picker" })}><NavIcon name="game" /> Home</button>
             </div>
           </div>
         </div>
@@ -155,7 +164,7 @@ export default function Page(){
         <div className={"view" + (view === "scorer" ? " active" : "")} id="view-scorer"
              data-game={game ? game.key : undefined}>
           <div className="top-links">
-            <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "landing" })}><NavIcon name="players" /> Switch player</button>
+            <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "landing" })}><NavIcon name="back" /> Game home</button>
             <button className="nav-action" onClick={() => dispatch({ type: "setView", view: "leaderboard" })}><NavIcon name="trophy" /> Leaderboard</button>
           </div>
           <div className="subtitle">{game ? game.subtitle : ""}</div>
@@ -197,7 +206,7 @@ export default function Page(){
                   ? save.data.celebrations.map(c => (
                       <div key={c.key}>🎉 New high score for {c.displayName} — {c.total} (previous best {c.previousHigh})!</div>
                     ))
-                  : `Saved ${save.data.saved.length} player${save.data.saved.length === 1 ? "" : "s"}' game.`}
+                  : `${save.data.updated ? "Updated" : "Saved"} ${save.data.saved.length} player${save.data.saved.length === 1 ? "" : "s"}' game.`}
               {!save.isError && save.data?.publicId ? (
                 <div className="save-banner-link">
                   <Link href={`/g/${save.data.publicId}`} className="link-btn">View this game →</Link>
@@ -210,6 +219,7 @@ export default function Page(){
             <Scorer game={game} scorer={scorer} gs={gs} variant={variant}
                     showRules={state.showRules} handlersFor={handlersFor} dispatch={dispatch} />
           ) : null}
+          {game ? <PhotoUpload key={`${game.key}-${photoKey}`} sessionPublicId={savedPublicId} /> : null}
         </div>
 
         {/* ---- History ---- */}
@@ -273,12 +283,26 @@ export default function Page(){
                 title={atCap ? `${game.label} seats up to ${game.maxPlayers} players` : undefined}
                 onClick={() => dispatch({ type: "addPlayer" })}>+ Add player</button>
         <button className="btn-primary" disabled={save.isPending} onClick={() => save.mutate()}>
-          {save.isPending ? "Saving…" : "Save this game"}
+          {save.isPending ? (savedPublicId ? "Updating…" : "Saving…") : (savedPublicId ? "Update saved game" : "Save this game")}
         </button>
-        <button onClick={() => { if (confirm("Start a new game? This clears the current scores.")){ dispatch({ type: "newGame" }); save.reset(); } }}>
+        <button onClick={() => requestConfirm({
+          title: "Start a new game?",
+          message: "This clears the current scores and any photos that have not been saved.",
+          confirmLabel: "Start new game",
+          action: () => {
+            dispatch({ type: "newGame" }); save.reset();
+            setSavedSessions(all => { const next = { ...all }; delete next[state.activeGame]; return next; });
+            setPhotoKey(k => k + 1);
+          }
+        })}>
           New game
         </button>
       </div>
+      <ConfirmDialog confirmation={confirmation} onClose={confirmed => {
+        const action = confirmation?.action;
+        setConfirmation(null);
+        if (confirmed) action?.();
+      }} />
     </>
   );
 }

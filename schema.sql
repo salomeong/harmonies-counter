@@ -45,8 +45,11 @@ CREATE TABLE IF NOT EXISTS session_photos (
   session_id        BIGINT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   session_player_id BIGINT REFERENCES session_players(id) ON DELETE CASCADE,
   blob_url          TEXT NOT NULL,
+  caption           TEXT,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE session_photos ADD COLUMN IF NOT EXISTS caption TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_sessions_game_played ON sessions (game_key, played_at DESC);
 CREATE INDEX IF NOT EXISTS idx_session_players_person ON session_players (person_id);

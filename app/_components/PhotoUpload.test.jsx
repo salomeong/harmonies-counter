@@ -88,16 +88,17 @@ describe("the cap accounts for existing photos and this-tab uploads together", (
 
     const [pathname, , options] = upload.mock.calls[0];
     expect(pathname.startsWith("sessions/the-real-session/")).toBe(true);
-    expect(JSON.parse(options.clientPayload)).toEqual({ sessionPublicId: "the-real-session" });
+    expect(JSON.parse(options.clientPayload)).toEqual({ sessionPublicId: "the-real-session", caption: "" });
     expect(options.handleUploadUrl).toBe("/api/photo-upload");
   });
 
-  test("a failed upload shows an inline error and leaves the add tile available to retry", async () => {
+  test("a failed upload keeps the staged photo and offers an explicit retry", async () => {
     upload.mockRejectedValue(new Error("network down"));
     const { container } = render(<PhotoUpload sessionPublicId="abc123" existingPhotos={[]} />);
     selectAFile(container);
     await waitFor(() => expect(container.querySelector(".photo-error")).toBeTruthy());
     expect(container.querySelector(".photo-add")).toBeTruthy();
-    expect(container.querySelectorAll(".photo-frame").length).toBe(0);
+    expect(container.querySelectorAll(".photo-frame").length).toBe(1);
+    expect(container.querySelector(".photo-retry")).toBeTruthy();
   });
 });

@@ -4,7 +4,8 @@
 // tab strip. Both read every number straight from `scorer` during render.
 
 import { tokenArt } from "@/src/ui/controls.js";
-import { PlayerCard, CatBody } from "./Card.jsx";
+import { useEffect, useState } from "react";
+import { PlayerCard, CatBody, CategoryBlock } from "./Card.jsx";
 import { MASCOTS } from "@/app/_lib/mascots.js";
 
 // The same drawn tokens as the tally buttons, so the strip reads as one visual language rather
@@ -166,7 +167,109 @@ function ByCategory({ game, scorer, gs, variant, showRules, handlersFor, dispatc
   );
 }
 
+function GuidedReveal({ game, scorer, gs, variant, showRules, handlersFor }){
+  const [guided, setGuided] = useState(true);
+  const [playerIndex, setPlayerIndex] = useState(0);
+  const [stage, setStage] = useState(0); // Regions 0–7, Sanctuaries 8, player review 9, final 10
+
+  useEffect(() => {
+    if (playerIndex >= gs.players.length) setPlayerIndex(Math.max(0, gs.players.length - 1));
+  }, [gs.players.length, playerIndex]);
+
+  if (!guided) return <>
+    <div className="guide-mode-switch" role="group" aria-label="Faraway scoring mode">
+      <button onClick={() => { setGuided(true); setStage(0); }}>Guided reveal</button>
+      <button className="active">Full scorecard</button>
+    </div>
+    <ByPlayer game={game} scorer={scorer} gs={gs} variant={variant}
+              showRules={showRules} handlersFor={handlersFor} />
+  </>;
+
+  if (stage === 10) return <>
+    <div className="guide-mode-switch" role="group" aria-label="Faraway scoring mode">
+      <button className="active">Guided reveal</button>
+      <button onClick={() => setGuided(false)}>Full scorecard</button>
+    </div>
+    <div className="faraway-guide guide-final">
+      <div className="guide-eyebrow">Journey complete</div>
+      <h2>Review every traveller</h2>
+      <ReviewGrid game={game} scorer={scorer} players={gs.players} />
+      <button className="mini-btn" onClick={() => { setPlayerIndex(0); setStage(0); }}>Edit from the beginning</button>
+    </div>
+  </>;
+
+  const p = gs.players[playerIndex];
+  if (!p) return null;
+  const on = handlersFor(p.id);
+  const regionTotal = scorer.catPoints(p, "region");
+  const sanctuaryTotal = scorer.catPoints(p, "sanctuary");
+  const regionTotalMode = p.totals?.region != null;
+  const cardNumber = 8 - stage;
+
+  function advance(){
+    if (stage < 9) return setStage(stage + 1);
+    if (playerIndex < gs.players.length - 1) {
+      setPlayerIndex(playerIndex + 1);
+      setStage(0);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else setStage(10);
+  }
+
+  return <>
+    <div className="guide-mode-switch" role="group" aria-label="Faraway scoring mode">
+      <button className="active">Guided reveal</button>
+      <button onClick={() => setGuided(false)}>Full scorecard</button>
+    </div>
+    <div className="faraway-guide">
+      <div className="guide-player-head">
+        <div><div className="guide-eyebrow">Traveller {playerIndex + 1} of {gs.players.length}</div>
+          <input value={p.name} aria-label="Player name" onChange={e => on.rename(e.target.value)} /></div>
+        <span className="total-badge">{scorer.total(p)}</span>
+      </div>
+
+      <div className="journey-trail" aria-label="Reveal progress">
+        {Array.from({ length: 8 }, (_, i) => <button key={i} className={stage === i ? "active" : (stage > i ? "done" : "")}
+          aria-label={`Region card ${8 - i}`} onClick={() => setStage(i)}>{8 - i}</button>)}
+        <button className={stage === 8 ? "active sanctuary" : (stage > 8 ? "done sanctuary" : "sanctuary")}
+          onClick={() => setStage(8)} aria-label="Sanctuaries">S</button>
+        <button className={stage === 9 ? "active review" : "review"} onClick={() => setStage(9)} aria-label="Review player">✓</button>
+      </div>
+
+      {stage < 8 ? <div className="guide-step">
+        <div className="guide-eyebrow">Region card {cardNumber}</div>
+        <h2>{stage === 0 ? "Begin at the rightmost card" : "Reveal the next card to the left"}</h2>
+        <p>Enter its fame only if the prerequisite is met. Otherwise leave it at zero.</p>
+        {regionTotalMode ? <CatBody scorer={scorer} p={p} catKey="region" variant={variant} on={on} /> : <>
+          <label className="guide-score-input"><span>Fame</span>
+            <input type="number" min="0" inputMode="numeric" value={p.regionFame[stage] ?? 0}
+              aria-label={`Fame for Region card ${cardNumber}`}
+              onChange={e => on.listInput("region", stage, e.target.value)} /></label>
+          <button className="mini-btn guide-total-shortcut" onClick={() => on.toTotal("region")}>Enter Region total instead</button>
+        </>}
+      </div> : stage === 8 ? <div className="guide-step">
+        <div className="guide-eyebrow">After all eight Regions</div>
+        <h2>Score Sanctuaries</h2>
+        <CategoryBlock game={game} scorer={scorer} p={p} catKey="sanctuary"
+          variant={variant} showRules={showRules} on={on} />
+      </div> : <div className="guide-step guide-player-review">
+        <div className="guide-eyebrow">Traveller review</div>
+        <h2>{p.name}&apos;s journey</h2>
+        <div className="guide-subtotals"><span>Regions <b>{regionTotal}</b></span><span>Sanctuaries <b>{sanctuaryTotal}</b></span></div>
+        <div className="guide-grand"><span>Total fame</span><span className="pip pip-total">{scorer.total(p)}</span></div>
+      </div>}
+
+      <div className="guide-actions">
+        <button disabled={stage === 0} onClick={() => setStage(Math.max(0, stage - 1))}>← Back</button>
+        <button className="btn-primary" onClick={advance}>{stage < 8 ? (stage === 7 ? "Sanctuaries →" : "Next card →")
+          : stage === 8 ? "Review traveller →"
+          : playerIndex < gs.players.length - 1 ? `Score ${gs.players[playerIndex + 1].name} →` : "Review all players →"}</button>
+      </div>
+    </div>
+  </>;
+}
+
 export function Scorer(props){
+  if (props.game.guidedReveal) return <div className="players"><GuidedReveal {...props} /></div>;
   const byCategory = props.gs.scoreMode === "category" && props.game.categoryMode;
   return <div className="players">{byCategory ? <ByCategory {...props} /> : <ByPlayer {...props} />}</div>;
 }

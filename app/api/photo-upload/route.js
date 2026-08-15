@@ -25,9 +25,9 @@ export async function POST(request) {
       body,
       request,
       onBeforeGenerateToken: async (pathname, clientPayloadRaw) => {
-        let sessionPublicId;
+        let sessionPublicId, caption;
         try {
-          ({ sessionPublicId } = JSON.parse(clientPayloadRaw || "{}"));
+          ({ sessionPublicId, caption } = JSON.parse(clientPayloadRaw || "{}"));
         } catch {
           throw new Error("invalid_client_payload");
         }
@@ -51,7 +51,7 @@ export async function POST(request) {
           addRandomSuffix: true,
           // Carried through to onUploadCompleted below, so it doesn't need to re-derive the
           // session's numeric id from the public one a second time.
-          tokenPayload: JSON.stringify({ sessionId: session.id })
+          tokenPayload: JSON.stringify({ sessionId: session.id, caption: String(caption || "").trim().slice(0, 240) })
         };
       },
 
@@ -64,9 +64,9 @@ export async function POST(request) {
       // Cannot fire against localhost — Blob has no route back to a dev machine. Verified on
       // preview instead; see docs/deploying.md.
       onUploadCompleted: async ({ blob, tokenPayload }) => {
-        const { sessionId } = JSON.parse(tokenPayload || "{}");
+        const { sessionId, caption } = JSON.parse(tokenPayload || "{}");
         if (!sessionId) return;
-        await recordSessionPhoto({ sessionId, blobUrl: blob.url });
+        await recordSessionPhoto({ sessionId, blobUrl: blob.url, caption });
       }
     });
 

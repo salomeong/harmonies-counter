@@ -76,15 +76,17 @@ export function CatBody({ scorer, p, catKey, variant, on }){
 // form — no drawer, no total-mode UI.
 export function CategoryBlock({ game, scorer, p, catKey, variant, showRules, on }){
   if (!game.accordion){
+    const totalMode = isTotalMode(p, catKey);
     return (
       <div className="category" data-cat={catKey}>
         <div className="cat-label">{scorer.label(catKey)}</div>
         <div className="cat-pts">{scorer.catPoints(p, catKey)}</div>
-        <Controls
-          specs={scorer.cat(catKey).controls(p, variant)}
-          on={on}
-          activeRung={undefined}
-        />
+        {totalMode ? <CatBody scorer={scorer} p={p} catKey={catKey} variant={variant} on={on} /> : <>
+          <Controls specs={scorer.cat(catKey).controls(p, variant)} on={on} activeRung={undefined} />
+          {scorer.canType(catKey) ? <div className="cat-actions flat-actions">
+            <button className="mini-btn" onClick={() => on.toTotal(catKey)}>✎ Enter category total</button>
+          </div> : null}
+        </>}
         <div className="cat-hint">{scorer.hint(catKey)}</div>
       </div>
     );

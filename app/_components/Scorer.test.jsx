@@ -33,21 +33,45 @@ function Harness(){
     showRules handlersFor={handlersFor} dispatch={() => {}} />;
 }
 
-test("Faraway follows Region cards 8 to 1, then Sanctuaries and traveller review", () => {
+test("Faraway walks every player through the SAME card before either moves to the next one", () => {
   render(<Harness />);
   expect(screen.getByRole("heading", { name: "Begin at the rightmost card" })).toBeTruthy();
+  expect(screen.getByLabelText("Player name")).toHaveValue("Player 1");
   fireEvent.change(screen.getByLabelText("Fame for Region card 8"), { target: { value: "5" } });
   expect(screen.getByText("5", { selector: ".total-badge" })).toBeTruthy();
 
+  // Both players enter card 8 before either sees card 7 — a phase-first, not player-first, walk.
+  fireEvent.click(screen.getByRole("button", { name: "Score Player 2 →" }));
+  expect(screen.getByLabelText("Player name")).toHaveValue("Player 2");
+  expect(screen.getByLabelText("Fame for Region card 8")).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Fame for Region card 8"), { target: { value: "3" } });
+
+  fireEvent.click(screen.getByRole("button", { name: "Next card →" }));
+  expect(screen.getByLabelText("Player name")).toHaveValue("Player 1");
+  expect(screen.getByLabelText("Fame for Region card 7")).toBeTruthy();
+
   for (let card = 7; card >= 1; card--) {
-    fireEvent.click(screen.getByRole("button", { name: "Next card →" }));
+    fireEvent.click(screen.getByRole("button", { name: "Score Player 2 →" }));
     expect(screen.getByLabelText(`Fame for Region card ${card}`)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: card === 1 ? "Sanctuaries →" : "Next card →" }));
+    expect(screen.getByLabelText("Player name")).toHaveValue("Player 1");
   }
-  fireEvent.click(screen.getByRole("button", { name: "Sanctuaries →" }));
+
   expect(screen.getByRole("heading", { name: "Score Sanctuaries" })).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Review traveller →" }));
+  fireEvent.click(screen.getByRole("button", { name: "Score Player 2 →" }));
+  expect(screen.getByLabelText("Player name")).toHaveValue("Player 2");
+
+  fireEvent.click(screen.getByRole("button", { name: "Review travellers →" }));
+  expect(screen.getByLabelText("Player name")).toHaveValue("Player 1");
   expect(screen.getByRole("heading", { name: "Player 1's journey" })).toBeTruthy();
   expect(screen.getByText("5", { selector: ".guide-grand .pip" })).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Score Player 2 →" }));
+  expect(screen.getByRole("heading", { name: "Player 2's journey" })).toBeTruthy();
+  expect(screen.getByText("3", { selector: ".guide-grand .pip" })).toBeTruthy();
+
+  fireEvent.click(screen.getByRole("button", { name: "Review all players →" }));
+  expect(screen.getByRole("heading", { name: "Review every traveller" })).toBeTruthy();
 });
 
 test("Faraway keeps the full scorecard as a fast path", () => {

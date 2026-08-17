@@ -4,7 +4,7 @@
 // tab strip. Both read every number straight from `scorer` during render.
 
 import { tokenArt } from "@/src/ui/controls.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PlayerCard, CatBody, CategoryBlock } from "./Card.jsx";
 import { MASCOTS } from "@/app/_lib/mascots.js";
 
@@ -170,10 +170,21 @@ function ByCategory({ game, scorer, gs, variant, showRules, handlersFor, dispatc
 function GuidedReveal({ game, scorer, gs, variant, showRules, handlersFor }){
   const [guided, setGuided] = useState(true);
   const [playerIndex, setPlayerIndex] = useState(0);
-  const [stage, setStage] = useState(0); // Regions 0–7, Sanctuaries 8, player review 9, final 10
+  const [stage, setStage] = useState(0); // Regions 0–7, Sanctuaries 8, player review 9, final 10 — the OUTER loop; playerIndex is inner
 
+  // A player added mid-reveal (the footer's "+ Add player" isn't gated on guided-reveal state)
+  // joins the group with the earlier cards never asked. Since stage is now shared across players,
+  // silently leaving them behind is a wrong-fame-total nobody would notice — so a GROWING player
+  // count restarts the walk at card 8 for everyone. Existing answers aren't touched, only revisited.
+  const prevPlayerCount = useRef(gs.players.length);
   useEffect(() => {
-    if (playerIndex >= gs.players.length) setPlayerIndex(Math.max(0, gs.players.length - 1));
+    if (gs.players.length > prevPlayerCount.current) {
+      setStage(0);
+      setPlayerIndex(0);
+    } else if (playerIndex >= gs.players.length) {
+      setPlayerIndex(Math.max(0, gs.players.length - 1));
+    }
+    prevPlayerCount.current = gs.players.length;
   }, [gs.players.length, playerIndex]);
 
   if (!guided) return <>
@@ -206,13 +217,35 @@ function GuidedReveal({ game, scorer, gs, variant, showRules, handlersFor }){
   const regionTotalMode = p.totals?.region != null;
   const cardNumber = 8 - stage;
 
+  // Phase-first: every player enters the SAME card before anyone moves to the next one — that's
+  // how the game is actually played round the table. playerIndex is the inner loop, stage the
+  // outer one (the reverse of a per-player walkthrough).
   function advance(){
-    if (stage < 9) return setStage(stage + 1);
     if (playerIndex < gs.players.length - 1) {
       setPlayerIndex(playerIndex + 1);
-      setStage(0);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    setPlayerIndex(0);
+    if (stage < 9) {
+      setStage(stage + 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } else setStage(10);
+  }
+
+  // Mirrors advance()'s one-step-at-a-time walk in reverse. Falling through to the previous
+  // phase's last player (rather than stopping dead at playerIndex 0) matters most for Faraway's
+  // own minPlayers: 1 — a lone player never leaves playerIndex 0, so scoping Back to "within this
+  // phase" only would leave it permanently disabled for every solo game.
+  function back(){
+    if (playerIndex > 0) {
+      setPlayerIndex(playerIndex - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else if (stage > 0) {
+      setStage(stage - 1);
+      setPlayerIndex(gs.players.length - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
   return <>
@@ -259,10 +292,12 @@ function GuidedReveal({ game, scorer, gs, variant, showRules, handlersFor }){
       </div>}
 
       <div className="guide-actions">
-        <button disabled={stage === 0} onClick={() => setStage(Math.max(0, stage - 1))}>← Back</button>
-        <button className="btn-primary" onClick={advance}>{stage < 8 ? (stage === 7 ? "Sanctuaries →" : "Next card →")
-          : stage === 8 ? "Review traveller →"
-          : playerIndex < gs.players.length - 1 ? `Score ${gs.players[playerIndex + 1].name} →` : "Review all players →"}</button>
+        <button disabled={playerIndex === 0 && stage === 0} onClick={back}>← Back</button>
+        <button className="btn-primary" onClick={advance}>{playerIndex < gs.players.length - 1
+          ? `Score ${gs.players[playerIndex + 1].name} →`
+          : stage < 8 ? (stage === 7 ? "Sanctuaries →" : "Next card →")
+          : stage === 8 ? "Review travellers →"
+          : "Review all players →"}</button>
       </div>
     </div>
   </>;

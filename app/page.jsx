@@ -350,7 +350,21 @@ export default function Page(){
             control that mysteriously stopped working. */}
         <button disabled={atCap}
                 title={atCap ? `${game.label} seats up to ${game.maxPlayers} players` : undefined}
-                onClick={() => dispatch({ type: "addPlayer" })}>+ Add player</button>
+                onClick={() => dispatch({ type: "addPlayer" })}>+ Player</button>
+        <button onClick={() => requestConfirm({
+          title: "Start a new game?",
+          message: "This clears the current scores and any photos that have not been saved.",
+          confirmLabel: "Start new game",
+          action: () => {
+            dispatch({ type: "newGame" }); save.reset();
+            setSavedSessions(all => { const next = { ...all }; delete next[state.activeGame]; return next; });
+            setSavedAsSupremacy(all => { const next = { ...all }; delete next[state.activeGame]; return next; });
+            setPhotoKey(k => k + 1);
+          }
+        })}>
+          New game
+        </button>
+        {/* Rightmost — the primary action reads last, matching the usual save/confirm convention. */}
         <button className="btn-primary" disabled={save.isPending} onClick={() => {
           // Saving over a recorded supremacy win with the ordinary score path would silently
           // replace a correct single-winner record with a tied 0-0 row (nothing was ever tallied,
@@ -366,20 +380,7 @@ export default function Page(){
             save.mutate();
           }
         }}>
-          {save.isPending ? (savedPublicId ? "Updating…" : "Saving…") : (savedPublicId ? "Update saved game" : "Save this game")}
-        </button>
-        <button onClick={() => requestConfirm({
-          title: "Start a new game?",
-          message: "This clears the current scores and any photos that have not been saved.",
-          confirmLabel: "Start new game",
-          action: () => {
-            dispatch({ type: "newGame" }); save.reset();
-            setSavedSessions(all => { const next = { ...all }; delete next[state.activeGame]; return next; });
-            setSavedAsSupremacy(all => { const next = { ...all }; delete next[state.activeGame]; return next; });
-            setPhotoKey(k => k + 1);
-          }
-        })}>
-          New game
+          {save.isPending ? (savedPublicId ? "Updating…" : "Saving…") : (savedPublicId ? "Update" : "Save")}
         </button>
       </div>
       <ConfirmDialog confirmation={confirmation} onClose={confirmed => {

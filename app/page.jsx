@@ -13,6 +13,7 @@ import { useTally } from "./_state/useTally.js";
 import { Scorer } from "./_components/Scorer.jsx";
 import { NavIcon } from "./_components/NavIcon.jsx";
 import { ConfirmDialog } from "./_components/ConfirmDialog.jsx";
+import { SupremacyDialog } from "./_components/SupremacyDialog.jsx";
 import { PhotoUpload } from "./_components/PhotoUpload.jsx";
 import { fetchProfiles, fetchProfile, fetchLeaderboard, postGame } from "@/src/api.js";
 import { formatDate } from "./_lib/format.js";
@@ -20,8 +21,15 @@ import { restoreDestination } from "./_lib/navigation.js";
 
 export default function Page(){
   const [confirmation, setConfirmation] = useState(null);
+  const [supremacyOpen, setSupremacyOpen] = useState(false);
   const [photoKey, setPhotoKey] = useState(0);
   const [savedSessions, setSavedSessions] = useState({});
+  // Keyed by game, same as savedSessions — whether the CURRENT saved session was recorded as a
+  // supremacy win (no score at all) rather than an ordinary score save. Needed to warn before the
+  // ordinary "Save this game" button silently overwrites a correct single-winner supremacy record
+  // with a tied 0-0 score row (both totals default to 0 since nothing was ever tallied) — found by
+  // adversarial review and reproduced live against the real database (2026-08-18).
+  const [savedAsSupremacy, setSavedAsSupremacy] = useState({});
   const requestConfirm = useCallback(details => setConfirmation(details), []);
   const { state, dispatch, game, gs, scorer, variant, handlersFor, games } = useTally(requestConfirm);
   const [nameDraft, setNameDraft] = useState("");
@@ -68,20 +76,29 @@ export default function Page(){
 
   // Every seat is sent, guests included. The server, not the client, decides who gets a `people`
   // row — the ledger needs a row per seat or the session misrepresents who was at the table.
+  //
+  // `supremacy`, when passed to `.mutate()`, switches this from the ordinary score save to 7
+  // Wonders Duel's alternate ending: no seat has a total or detail to send (nothing was tallied —
+  // the game ended before Civilian Victory scoring was ever meaningful), and `winnerSeat` is what
+  // tells the server who won instead. See app/api/save-game/validate.mjs and CLAUDE.md's "7 Wonders
+  // Duel" section.
   const save = useMutation({
-    mutationFn: () => postGame({
+    mutationFn: (supremacy) => postGame({
       publicId: savedPublicId || undefined,
       game: state.activeGame,
-      endedBy: "score",
+      endedBy: supremacy ? supremacy.endedBy : "score",
+      winnerSeat: supremacy ? supremacy.winnerSeat : undefined,
       variant,
       players: gs.players.map((p, i) => ({
         name: p.name,
         seat: i,
-        total: scorer.total(p),
-        detail: scorer.detail(p)
+        ...(supremacy ? {} : { total: scorer.total(p), detail: scorer.detail(p) })
       }))
     }),
-    onSuccess: data => setSavedSessions(all => ({ ...all, [state.activeGame]: data.publicId }))
+    onSuccess: (data, supremacy) => {
+      setSavedSessions(all => ({ ...all, [state.activeGame]: data.publicId }));
+      setSavedAsSupremacy(all => ({ ...all, [state.activeGame]: !!supremacy }));
+    }
   });
 
   function startScorer(name){
@@ -198,10 +215,48 @@ export default function Page(){
             </div>
           ) : null}
 
+          {/* The shared conflict pawn: one track for both players, not a per-card control — same
+              reasoning as the settings bar above, but its own block since a 7-rung ladder plus two
+              name labels doesn't fit the compact toggle-group row. game.militaryZones carries the
+              rung/VP data so this stays generic rather than checking game.key (CLAUDE.md). */}
+          {game && game.militaryZones ? (
+            <div className="military-track">
+              <div className="military-names">
+                <span>{gs.players[0] ? gs.players[0].name : "Player 1"}</span>
+                <span>{gs.players[1] ? gs.players[1].name : "Player 2"}</span>
+              </div>
+              <div className="ladder military-ladder">
+                {game.militaryZones.map(z => (
+                  <button key={z.value} type="button"
+                          className={"rung" + (gs.militaryTrack === z.value ? " on" : "")}
+                          aria-pressed={gs.militaryTrack === z.value}
+                          aria-label={z.value === 0 ? "Neutral, no military VP" : `${z.vp} VP toward ${z.value < 0 ? (gs.players[0] ? gs.players[0].name : "Player 1") : (gs.players[1] ? gs.players[1].name : "Player 2")}`}
+                          onClick={() => dispatch({ type: "setMilitaryTrack", value: z.value })}>
+                    {z.vp || "–"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Only 7 Wonders Duel can end this way, and militaryZones is the same descriptor
+              signal the shared track above is gated on — one flag, not a second one meaning the
+              same thing (CLAUDE.md's "no game.key checks in components" rule). */}
+          {game && game.militaryZones ? (
+            <div className="supremacy-trigger">
+              <button className="link-btn" onClick={() => setSupremacyOpen(true)}>
+                Game ended by supremacy instead? Record the win →
+              </button>
+            </div>
+          ) : null}
+
           {save.isSuccess || save.isError ? (
             <div className={"save-banner visible " + (save.isError ? "error" : (save.data?.celebrations?.length ? "celebrate" : "info"))}>
               {save.isError
-                ? <>Couldn&apos;t save — check your connection and try again. <button className="retry-btn" onClick={() => save.mutate()}>Retry</button></>
+                // Replays save.variables, not a bare save.mutate() — a failed supremacy-win save
+                // must retry as the SAME supremacy save, not silently fall back to an ordinary
+                // score save (mutate() with no argument means "supremacy: undefined").
+                ? <>Couldn&apos;t save — check your connection and try again. <button className="retry-btn" onClick={() => save.mutate(save.variables)}>Retry</button></>
                 : save.data.celebrations?.length
                   ? save.data.celebrations.map(c => (
                       <div key={c.key}>🎉 New high score for {c.displayName} — {c.total} (previous best {c.previousHigh})!</div>
@@ -272,7 +327,8 @@ export default function Page(){
         <div className="citation-footer">
           Benvenuto, J. (2024). Harmonies [Board game]. Libellud.<br />
           Goupy, J., &amp; Lebrat, C. (2023). Faraway [Board game]. Catch Up Games.<br />
-          Bauza, A. (2010). 7 Wonders [Board game]. Repos Production.
+          Bauza, A. (2010). 7 Wonders [Board game]. Repos Production.<br />
+          Bauza, A., &amp; Cathala, B. (2015). 7 Wonders Duel [Board game]. Repos Production.
         </div>
       </div>
 
@@ -282,7 +338,21 @@ export default function Page(){
         <button disabled={atCap}
                 title={atCap ? `${game.label} seats up to ${game.maxPlayers} players` : undefined}
                 onClick={() => dispatch({ type: "addPlayer" })}>+ Add player</button>
-        <button className="btn-primary" disabled={save.isPending} onClick={() => save.mutate()}>
+        <button className="btn-primary" disabled={save.isPending} onClick={() => {
+          // Saving over a recorded supremacy win with the ordinary score path would silently
+          // replace a correct single-winner record with a tied 0-0 row (nothing was ever tallied,
+          // so both totals default to 0) — confirm first rather than losing that data quietly.
+          if (savedAsSupremacy[state.activeGame]) {
+            requestConfirm({
+              title: "Save a score instead?",
+              message: "This game was already recorded as a supremacy win with no score. Saving now replaces that with an ordinary score save.",
+              confirmLabel: "Save score instead",
+              action: () => save.mutate()
+            });
+          } else {
+            save.mutate();
+          }
+        }}>
           {save.isPending ? (savedPublicId ? "Updating…" : "Saving…") : (savedPublicId ? "Update saved game" : "Save this game")}
         </button>
         <button onClick={() => requestConfirm({
@@ -292,6 +362,7 @@ export default function Page(){
           action: () => {
             dispatch({ type: "newGame" }); save.reset();
             setSavedSessions(all => { const next = { ...all }; delete next[state.activeGame]; return next; });
+            setSavedAsSupremacy(all => { const next = { ...all }; delete next[state.activeGame]; return next; });
             setPhotoKey(k => k + 1);
           }
         })}>
@@ -303,6 +374,18 @@ export default function Page(){
         setConfirmation(null);
         if (confirmed) action?.();
       }} />
+      {gs ? (
+        <SupremacyDialog
+          open={supremacyOpen}
+          players={gs.players}
+          pending={save.isPending}
+          onCancel={() => setSupremacyOpen(false)}
+          onConfirm={(endedBy, winnerSeat) => {
+            setSupremacyOpen(false);
+            save.mutate({ endedBy, winnerSeat });
+          }}
+        />
+      ) : null}
     </>
   );
 }

@@ -33,7 +33,11 @@ function freshGameState(game){
     activeCat: game.cats[0] ? game.cats[0].key : null,
     doneCats: [],
     scoreMode: "player",
-    waterSide: "river"
+    waterSide: "river",
+    // 7 Wonders Duel's shared conflict-pawn position — a signed zone (see
+    // src/games/sevenwondersduel.js's MILITARY_ZONES), 0 = neutral. Lives here rather than on
+    // either player, same reasoning as waterSide: it's game-level state, not per-player.
+    militaryTrack: 0
   };
 }
 
@@ -91,6 +95,7 @@ function reducer(state, a){
     case "hydrateRules": return { ...state, showRules: a.showRules };
     case "setScoreMode": return patchGame(state, { scoreMode: a.mode });
     case "setWaterSide": return patchGame(state, { waterSide: a.side });
+    case "setMilitaryTrack": return patchGame(state, { militaryTrack: a.value });
     case "pickCat":      return patchGame(state, { activeCat: a.cat });
     case "nextCat":      return patchGame(markDone(state, currentGameState(state).activeCat), { activeCat: a.next });
 
@@ -113,7 +118,12 @@ function reducer(state, a){
       return patchGame(state, {
         players: [scorer.newPlayer(1, "Player 1"), scorer.newPlayer(2, "Player 2")],
         nextId: 3,
-        doneCats: []
+        doneCats: [],
+        // Unlike waterSide (a lasting board-setup preference, deliberately kept across games),
+        // militaryTrack describes THIS game's finished conflict pawn position — carrying it into
+        // the next game would silently award 0/2/5/10 VP nobody put there. "New game" promises to
+        // clear scores (app/page.jsx's confirm dialog); this is part of that promise.
+        militaryTrack: 0
       });
     }
     case "rename":   return editPlayer(state, a.id, p => { p.name = a.name; });
@@ -161,8 +171,9 @@ export function useTally(requestConfirm = details => details.action()){
   const game = state.activeGame ? getGame(state.activeGame) : null;
   const gs = currentGameState(state);
   const waterSide = gs ? gs.waterSide : "river";
+  const militaryTrack = gs ? gs.militaryTrack : 0;
 
-  const variant = useMemo(() => ({ waterSide }), [waterSide]);
+  const variant = useMemo(() => ({ waterSide, militaryTrack }), [waterSide, militaryTrack]);
   // Bound to a getter that reads the memoised variant, so descriptors stay pure and a stale
   // closure can't score a river board as islands.
   const scorer = useMemo(() => (game ? makeScorer(game, () => variant) : null), [game, variant]);

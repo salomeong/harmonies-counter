@@ -171,6 +171,33 @@ export function numberList(o){
   };
 }
 
+// A build-once toggle — 7 Wonders Duel's Wonders and Progress tokens are each built/obtained at
+// most once per player, unlike a tally (river, science symbols, military wins) which climbs
+// indefinitely. Unlike tallyControl there is no minus/count-chip: one tap sets p[path][key] to 1,
+// another sets it back to 0, via the same generic `setCount` action every stack/river tally
+// already dispatches — no new reducer case needed.
+//
+// Rendered as a pill chip (name + its fixed VP pip), not a drawn token button: with up to 12
+// distinct named items in one list, large token art doesn't scale the way it does for a 3-4 item
+// tallyGroup. Placeholder-fidelity for now — see CLAUDE.md before any follow-up polish pass.
+export function checkChip(o){
+  return {
+    type: "checkChip",
+    scoreCat: o.scoreCat,
+    path: o.path,
+    key: o.key,
+    name: o.name,
+    pip: o.pip,
+    checked: !!o.checked,
+    label: o.label
+  };
+}
+
+// A row of checkChips — the `.check-group` wrapper the CSS expects, parallel to tallyGroup.
+export function checkGroup(items){
+  return { type: "checkGroup", items };
+}
+
 // A single bare number input (Harmonies' Nature Spirit bonus). `subrow` reproduces the
 // `<div class="subrow">` the descriptor used to wrap this in.
 export function numField(playerId, cat, value, placeholder, min = 0){

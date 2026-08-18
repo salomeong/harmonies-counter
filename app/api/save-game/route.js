@@ -11,8 +11,8 @@
 // `people` row and therefore show up in leaderboards/history; unnamed/default-named players still
 // get a session_players row with person_id = NULL.
 import { NextResponse } from 'next/server';
-import { getSql, normalizeName, isDefaultName, normalizeGame, normalizeEndedBy, makePublicId,
-         PUBLIC_ID_ALPHABET, PUBLIC_ID_LENGTH } from '../../../lib/db.mjs';
+import { getSql, normalizeName, makePublicId } from '../../../lib/db.mjs';
+import { validate } from './validate.mjs';
 
 // This route reads process.env.DATABASE_URL through the lazy getSql() below — force-dynamic keeps
 // Next from trying to evaluate (and cache) it at `next build` time, when there is no database.
@@ -21,72 +21,9 @@ export const dynamic = 'force-dynamic';
 // Method routing (POST vs everything else) is now handled by App Router itself — a request with
 // any other method gets Next's automatic 405 response, so the manual `req.method !== 'POST'` check
 // that used to open this handler is gone.
-
-const MAX_PLAYERS = 8; // generous upper bound — every game in GAMES tops out at 7 (7 Wonders)
-
-function validate(body) {
-  const errors = [];
-
-  const game = normalizeGame(body?.game);
-  if (!game) errors.push('invalid_game');
-
-  const endedBy = body?.endedBy === undefined ? 'score' : normalizeEndedBy(body.endedBy);
-  if (!endedBy) errors.push('invalid_ended_by');
-
-  const variant = (body?.variant && typeof body.variant === 'object' && !Array.isArray(body.variant))
-    ? body.variant
-    : {};
-
-  const requestedPublicId = typeof body?.publicId === 'string' ? body.publicId.trim() : '';
-  const publicIdPattern = new RegExp(`^[${PUBLIC_ID_ALPHABET}]{${PUBLIC_ID_LENGTH}}$`);
-  if (requestedPublicId && !publicIdPattern.test(requestedPublicId)) errors.push('invalid_public_id');
-
-  const rawPlayers = Array.isArray(body?.players) ? body.players : null;
-  if (!rawPlayers || rawPlayers.length === 0) errors.push('missing_players');
-  if (rawPlayers && rawPlayers.length > MAX_PLAYERS) errors.push('too_many_players');
-
-  const players = [];
-  const seenSeats = new Set();
-
-  if (rawPlayers && errors.length === 0) {
-    rawPlayers.forEach((entry, i) => {
-      const seat = Number.isInteger(entry?.seat) ? entry.seat : i;
-      if (seenSeats.has(seat)) { errors.push(`duplicate_seat_${seat}`); return; }
-      seenSeats.add(seat);
-
-      const rawName = typeof entry?.name === 'string' ? entry.name : '';
-      const trimmed = rawName.trim() || `Player ${seat + 1}`;
-
-      let total = null;
-      if (endedBy === 'score') {
-        // Require a genuine number. Number(null), Number("") and Number([]) are all 0, so a client
-        // that failed to compute a score would otherwise be recorded as a legitimate zero — and a
-        // wrong number in the ledger is worse than a rejected save.
-        if (typeof entry?.total !== 'number' && typeof entry?.total !== 'string') {
-          errors.push(`invalid_total_seat_${seat}`); return;
-        }
-        total = Number(entry.total);
-        if (!Number.isFinite(total)) { errors.push(`invalid_total_seat_${seat}`); return; }
-        total = Math.trunc(total);
-        // total_score is int4; out-of-range would fail at insert time as an opaque 500.
-        if (total < -2147483648 || total > 2147483647) {
-          errors.push(`total_out_of_range_seat_${seat}`); return;
-        }
-      }
-
-      // Arrays are excluded for the same reason `variant` excludes them: JSONB would accept one,
-      // but every real caller sends the object scorer.detail() builds, so anything else is a bug
-      // worth surfacing rather than storing.
-      const detail = (entry?.detail && typeof entry.detail === 'object' && !Array.isArray(entry.detail))
-        ? entry.detail
-        : {};
-
-      players.push({ seat, displayName: trimmed, total, detail, isGuest: isDefaultName(trimmed) });
-    });
-  }
-
-  return { game, endedBy, variant, players, requestedPublicId, errors };
-}
+//
+// validate() itself now lives in ./validate.mjs — pure, no `next/server` import, so it can be
+// `node --test`ed directly (validate.test.mjs). See that file's header comment for why.
 
 export async function POST(request) {
   // The original relied on Vercel parsing `req.body` for us. App Router hands us the raw Request,
@@ -101,7 +38,7 @@ export async function POST(request) {
     body = undefined;
   }
 
-  const { game, endedBy, variant, players, requestedPublicId, errors } = validate(body);
+  const { game, endedBy, variant, players, requestedPublicId, winnerSeat, errors } = validate(body);
   if (errors.length) {
     return NextResponse.json({ error: 'invalid_request', details: errors }, { status: 400 });
   }
@@ -168,7 +105,10 @@ export async function POST(request) {
     const nameKeys = players.map(p => (p.isGuest ? null : normalizeName(p.displayName)));
     const displayNames = players.map(p => p.displayName);
     const totals = players.map(p => p.total);
-    const isWinners = players.map(p => endedBy === 'score' && p.total === maxTotal);
+    // Score endings: highest total wins. Supremacy endings: no totals exist to compare, so the
+    // client-declared (and seat-validated, see validate() above) winnerSeat decides directly.
+    const isWinners = players.map(p =>
+      endedBy === 'score' ? p.total === maxTotal : p.seat === winnerSeat);
     const detailsJson = players.map(p => JSON.stringify(p.detail));
 
     let publicId = requestedPublicId || null;

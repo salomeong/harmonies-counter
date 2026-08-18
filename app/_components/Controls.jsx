@@ -111,6 +111,31 @@ function Tally({ spec, on }){
   );
 }
 
+// One tap toggles p[path][key] between 0 and 1 via the same setCount action every tally already
+// uses — see checkChip()'s comment in src/ui/controls.js for why no new reducer case was needed.
+function CheckChip({ spec, on }){
+  return (
+    <button
+      type="button"
+      className={"check-chip" + (spec.checked ? " on" : "")}
+      aria-pressed={spec.checked}
+      aria-label={spec.label}
+      onClick={() => on.setCount(spec, spec.checked ? 0 : 1)}
+    >
+      <span className="check-chip-name">{spec.name}</span>
+      <span className="pip">{spec.pip}</span>
+    </button>
+  );
+}
+
+function CheckGroup({ spec, on }){
+  return (
+    <div className="check-group">
+      {spec.items.map((c, i) => <CheckChip spec={c} on={on} key={c.path + ":" + c.key + i} />)}
+    </div>
+  );
+}
+
 function Ladder({ spec, active }){
   return (
     <div className="ladder">
@@ -175,6 +200,8 @@ export function Controls({ specs, on, activeRung }){
         );
       case "ladder":
         return <Ladder spec={spec} active={activeRung} key={i} />;
+      case "checkGroup":
+        return <CheckGroup spec={spec} on={on} key={i} />;
       case "list":
         return <NumberList spec={spec} on={on} key={i} />;
       case "num":

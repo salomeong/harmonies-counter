@@ -67,10 +67,32 @@ function CategoryRow({ scorer, p, catKey, variant }){
 // total: SumStrip's own `breakdown.total` is overridden to the same displayed value as the header
 // badge before being passed in, rather than left to recompute independently — sub-group columns
 // (landscape/animals/…) are still genuinely recomputed, since nothing else stores those.
+//
+// `storedTotal == null` is schema.sql's own documented signal for "this row has no score" (total_
+// score is NULL exactly when ended_by <> 'score' — see docs/ledger.md), not a check invented here.
+// A 7 Wonders Duel supremacy win is the one case that produces it today: the game ended before a
+// Civilian Victory tally ever happened, so there is no per-category grid to show and no "0" that
+// wouldn't be read as a real (if unlucky) score. RecapHeader already states the reason ("· ended by
+// military supremacy"), so this card only needs to say there's nothing more to show.
 function RecapPlayerCard({ game, scorer, p, present, storedTotal, mascotSrc, variant, isWinner, showCrown }){
+  if (storedTotal == null) {
+    return (
+      <div className={"player-card" + (game.cardClass ? " " + game.cardClass : "") + (isWinner ? " winner" : "")}>
+        <div className="player-header">
+          {game.mascots ? <img className="mascot" src={mascotSrc} alt="" /> : null}
+          <span className="recap-name">{p.name}</span>
+          <span className={"crown" + (showCrown ? "" : " hidden")}>👑</span>
+        </div>
+        <div className="recap-no-score">
+          {isWinner ? "Won — the game ended before scoring was tallied." : "The game ended before scoring was tallied."}
+        </div>
+      </div>
+    );
+  }
+
   const recomputedTotal = scorer.total(p);
-  const displayTotal = storedTotal != null ? storedTotal : recomputedTotal;
-  const diverges = storedTotal != null && recomputedTotal !== storedTotal;
+  const displayTotal = storedTotal;
+  const diverges = recomputedTotal !== storedTotal;
   const sumStripBreakdown = { ...scorer.breakdown(p), total: displayTotal };
 
   return (

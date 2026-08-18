@@ -12,6 +12,7 @@ import { RecapPlayers } from "@/app/_components/Recap.jsx";
 import { makeScorer } from "@/src/scoring.js";
 import { GAME_LIST } from "@/src/games/index.js";
 import { sevenwonders } from "@/src/games/sevenwonders.js";
+import { sevenwondersduel } from "@/src/games/sevenwondersduel.js";
 
 afterEach(cleanup);
 
@@ -29,6 +30,23 @@ function fullPlayerFor(game){
   if (game.key === "faraway"){
     return { id: 1, name: "Full", totals: {}, open: [], regionFame: [1, 2, 3], sanctuaryFame: [4, 5] };
   }
+  if (game.key === "7wondersduel"){
+    return {
+      id: 1, name: "Full", totals: {}, open: [],
+      // military owns no player field at all — its value lives on the session's `variant`, not here.
+      civilian: [6, 7], science: [5, 3], commercial: [2], guilds: [9, 10],
+      wonders: {
+        pyramids: 1, sphinx: 0, greatLibrary: 1, greatLighthouse: 0, appianWay: 0,
+        circusMaximus: 0, colossus: 0, hangingGardens: 0, statueOfZeus: 0,
+        mausoleum: 0, piraeus: 0, templeOfArtemis: 0
+      },
+      progress: {
+        philosophy: 1, agriculture: 0, mathematics: 1, architecture: 0, economy: 0,
+        law: 0, masonry: 0, strategy: 0, theology: 0, urbanism: 0
+      },
+      treasury: 17
+    };
+  }
   return {
     id: 1, name: "Full", totals: {}, open: [],
     military: { w1: 1, w3: 2, w5: 3, loss: 4 }, treasury: 17,
@@ -40,10 +58,12 @@ function fullPlayerFor(game){
 
 // Builds one `restored` entry the way app/g/[id]/page.jsx does: a detail blob in, fromDetail() out,
 // with isWinner/storedTotal carried alongside exactly as they'd arrive from the DB row (never
-// folded into the reconstructed player itself).
-function seat({ scorer, detail, isWinner = false, storedTotal, variant = {} }){
-  const { player, present } = scorer.fromDetail(detail, { id: 1, name: "Row" });
-  return { seat: 0, player, present, isWinner, storedTotal, variant };
+// folded into the reconstructed player itself). `seatIndex` defaults to 0/id 1 for every existing
+// single-seat caller; a multi-seat test (below) passes it explicitly, matching loadRecap()'s own
+// `id: row.seat + 1`.
+function seat({ scorer, detail, isWinner = false, storedTotal, variant = {}, seatIndex = 0 }){
+  const { player, present } = scorer.fromDetail(detail, { id: seatIndex + 1, name: "Row" });
+  return { seat: seatIndex, player, present, isWinner, storedTotal, variant };
 }
 
 describe("recap round-trips a saved game for every registered game", () => {
@@ -89,6 +109,56 @@ test("7 Wonders: a typed override on an infer:null category round-trips into a r
   expect(container.querySelector(".total-badge").textContent).toBe(String(storedTotal));
 });
 
+test("7 Wonders Duel: a nonzero shared militaryTrack recomputes correctly for both seats on the recap, not just live", () => {
+  // Military lives entirely on the session's `variant`, not on either player — a regression here
+  // (e.g. loadRecap() rebuilding the scorer with a default variant instead of session.variant)
+  // would still pass every other test in this file, since none of them set militaryTrack. Mirrors
+  // app/g/[id]/page.jsx's loadRecap() exactly: one scorer, one shared variant, two seats restored
+  // from it with id = seat + 1.
+  const variant = { militaryTrack: -2 }; // leans toward seat 0 / id 1 — worth 5 VP
+  const scorer = makeScorer(sevenwondersduel, () => variant);
+  const p1 = scorer.newPlayer(1, "P1");
+  const p2 = scorer.newPlayer(2, "P2");
+  const restored = [
+    seat({ scorer, detail: scorer.detail(p1), variant, seatIndex: 0, storedTotal: scorer.total(p1), isWinner: true }),
+    seat({ scorer, detail: scorer.detail(p2), variant, seatIndex: 1, storedTotal: scorer.total(p2) })
+  ];
+
+  const { container } = render(<RecapPlayers game={sevenwondersduel} scorer={scorer} restored={restored} />);
+  const cards = container.querySelectorAll(".player-card");
+  expect(cards[0].querySelector('.category[data-cat="military"] .cat-pts').textContent).toBe("5");
+  expect(cards[1].querySelector('.category[data-cat="military"] .cat-pts').textContent).toBe("0");
+});
+
+test("7 Wonders Duel: a supremacy-ended row (storedTotal null) renders no total badge and no per-category grid, just who won", () => {
+  // Mirrors exactly what a real save produces for a military/scientific supremacy win: total_score
+  // NULL for every seat (schema.sql's own documented meaning of NULL here), detail forced to {} by
+  // app/api/save-game/validate.mjs, is_winner set from winnerSeat rather than a highest total.
+  const scorer = makeScorer(sevenwondersduel, () => ({}));
+  const restored = [
+    seat({ scorer, detail: {}, seatIndex: 0, storedTotal: null, isWinner: true }),
+    seat({ scorer, detail: {}, seatIndex: 1, storedTotal: null, isWinner: false })
+  ];
+
+  const { container } = render(<RecapPlayers game={sevenwondersduel} scorer={scorer} restored={restored} />);
+  const cards = container.querySelectorAll(".player-card");
+  expect(cards.length).toBe(2);
+
+  // No numeric badge implying a real (if unlucky) score of 0, and no per-category grid at all —
+  // there is nothing scored to show a breakdown of.
+  expect(cards[0].querySelector(".total-badge")).toBeNull();
+  expect(cards[0].querySelector(".category")).toBeNull();
+  expect(cards[0].querySelector(".card-sum")).toBeNull();
+
+  expect(cards[0].querySelector(".recap-no-score").textContent).toMatch(/^Won/);
+  expect(cards[0].classList.contains("winner")).toBe(true);
+  expect(cards[0].querySelector(".crown").classList.contains("hidden")).toBe(false);
+
+  expect(cards[1].querySelector(".recap-no-score").textContent).not.toMatch(/^Won/);
+  expect(cards[1].classList.contains("winner")).toBe(false);
+  expect(cards[1].querySelector(".crown").classList.contains("hidden")).toBe(true);
+});
+
 test("a category missing from the blob renders as untracked, not as a silent 0", () => {
   const game = GAME_LIST[0]; // harmonies
   const scorer = makeScorer(game, () => ({ waterSide: "river" }));
@@ -96,7 +166,11 @@ test("a category missing from the blob renders as untracked, not as a silent 0",
   const detail = scorer.detail(p);
   delete detail.bonus; // simulates a row saved before this category existed
 
-  const restored = [seat({ scorer, detail, isWinner: true, storedTotal: null })];
+  // storedTotal must be a real number here, not null — null is a distinct, meaningful signal now
+  // (a 7 Wonders Duel supremacy ending, tested separately above) that renders a completely
+  // different card with no category grid at all. This test is about per-category presence, so it
+  // needs an ordinary scored row; the actual number is unimportant, only that it exists.
+  const restored = [seat({ scorer, detail, isWinner: true, storedTotal: scorer.total(p) })];
   const { container } = render(<RecapPlayers game={game} scorer={scorer} restored={restored} />);
 
   const bonusRow = container.querySelector('.category[data-cat="bonus"]');

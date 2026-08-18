@@ -68,9 +68,21 @@ alongside `total_score`) if that ever changes.
   `session_players` rows inside one transaction. Replacement—not per-seat patching—is intentional:
   it correctly handles removed and reordered seats as well as edits. High-score comparison excludes
   the session being updated, so a game does not become its own “previous high.”
-- `sessions.ended_by` supports Duel's supremacy endings, but **the API only accepts `'score'`** —
-  nothing in the payload says who won a game that ended with no scores counted, so accepting one
-  would write a session with no winner. Thread a `winnerSeat` through before enabling it.
+- `sessions.ended_by` supports Duel's supremacy endings, and the API now accepts all three values
+  in `ACCEPTED_ENDED_BY` (2026-08-18). A supremacy ending requires `winnerSeat` in the payload —
+  validated against the actual submitted seats in `app/api/save-game/validate.mjs` — since there
+  are no totals to determine a winner from otherwise. `total_score` stays NULL for every seat on
+  such a row (as the schema always intended), and `detail` is forced to `{}` server-side regardless
+  of what the client sends: the game stopped before a Civilian Victory tally was ever meaningful,
+  so there is no "raw entered state" for it to be the raw form of. See CLAUDE.md's "7 Wonders Duel"
+  section.
+- **A supremacy `endedBy` is rejected for any game whose descriptor doesn't declare
+  `militaryZones`** (`validate.mjs`), checked server-side regardless of which game the client
+  claims. `ACCEPTED_ENDED_BY` alone doesn't scope an ending to a specific game, and this app has no
+  auth, so without that check any client could POST a fabricated scoreless "win" for ANY game —
+  found by adversarial review and reproduced live against the real database before the fix landed.
+  Don't assume the client's own UI gating (`SupremacyDialog` only renders when `game.militaryZones`
+  is set) is sufficient on its own; the API is the actual trust boundary.
 - **`session_photos` is live as of 2026-08-13** — board photos, uploaded client-side straight to
   Vercel Blob (see CLAUDE.md's "Board photos" section for the full flow). `blob_url` is the only
   byte-related value this table stores; the bytes never touch Postgres. Its optional `caption` is

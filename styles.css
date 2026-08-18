@@ -264,6 +264,50 @@
     background: var(--tok-water);
     color: white;
   }
+
+  /* ---- shared military track (7 Wonders Duel) ----
+     One conflict pawn shared by both players, so this renders once above the cards rather than
+     inside either player's card — same footprint idea as .global-settings. */
+  .military-track{
+    max-width: 640px;
+    margin: 0 auto 14px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 10px 12px;
+  }
+  .military-names{
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .military-ladder{
+    justify-content: center;
+    /* tints the off rungs --sw-war too (the .rung base rule reads --rung at 18% opacity), not
+       just the selected one — a military track defaulting to water-blue would read as a mistake */
+    --rung: var(--sw-war);
+  }
+  .military-ladder .rung{
+    border: none;
+    font-family: inherit;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  /* white, not the dark ink Harmonies' river ladder uses on --tok-water: measured separately
+     against --sw-war (2.66:1 with dark ink, fails AA; 6.02:1 with white, passes) — the two hues
+     are not interchangeable, per CLAUDE.md's "check contrast before choosing a pip colour". */
+  .military-ladder .rung.on{
+    color: #fff;
+  }
+  .supremacy-trigger{
+    max-width: 640px;
+    margin: 0 auto 12px;
+    text-align: center;
+  }
   .players{
     max-width: 640px;
     margin: 0 auto;
@@ -595,6 +639,40 @@
   .minus:disabled{
     opacity: 0.3;
     cursor: default;
+  }
+
+  /* ---- build-once check chips (7 Wonders Duel: Wonders, Progress tokens) ----
+     A pill, not a drawn token button: with up to 12 distinct named items in one list, the 68px
+     token-art buttons that work for a 3-4 item tallyGroup don't scale. Placeholder fidelity. */
+  .check-group{
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .check-chip{
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    border-radius: 999px;
+    padding: 6px 8px 6px 12px;
+    font-family: inherit;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ink);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    touch-action: manipulation;
+    transition: transform 0.06s ease, background 0.12s ease, border-color 0.12s ease;
+  }
+  .check-chip:active{ transform: scale(0.96); }
+  /* filled-on-select, same language as .rules-toggle.active */
+  .check-chip.on{
+    background: color-mix(in srgb, var(--green) 20%, var(--card));
+    border-color: var(--green);
   }
 
   /* shared with the Faraway scorer, which still uses the plain label/score grid */
@@ -1526,6 +1604,16 @@
   .recap-untracked .tok-dot{
     box-shadow: none;
   }
+  /* The whole body of a supremacy-ended card (7 Wonders Duel) — no per-category grid, no total
+     badge, since neither exists for this row. More presence than .recap-note's footnote styling,
+     since here it IS the card's entire content, not an aside beneath a real breakdown. */
+  .recap-no-score{
+    padding: 16px 4px 4px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.88rem;
+    line-height: 1.4;
+  }
 
   /* ---- board photos ----
      Photos of the physical board tucked into the scorepad like Polaroids paperclipped to a page —
@@ -1745,6 +1833,25 @@
     background: color-mix(in srgb, var(--red) 14%, var(--card)) !important;
     color: var(--red) !important;
   }
+
+  /* ---- supremacy-win dialog (7 Wonders Duel) ---- */
+  .supremacy-form{
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-bottom: 18px;
+  }
+  .supremacy-field{
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .supremacy-label{
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: var(--muted);
+  }
+  .supremacy-field .toggle-group{ align-self: flex-start; }
 
   .tally-photos{
     max-width: 780px;

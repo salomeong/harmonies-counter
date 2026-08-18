@@ -15,13 +15,14 @@
 // added later is covered automatically, and a game removed here fails loudly instead of silently.
 
 import { describe, test, expect, afterEach } from "vitest";
-import { render, fireEvent, cleanup } from "@testing-library/react";
+import { render, fireEvent, cleanup, act } from "@testing-library/react";
 import { useEffect } from "react";
 import { useTally } from "@/app/_state/useTally.js";
 import { PlayerCard } from "@/app/_components/Card.jsx";
 import { makeScorer } from "@/src/scoring.js";
 import { GAME_LIST } from "@/src/games/index.js";
 import { sevenwonders } from "@/src/games/sevenwonders.js";
+import { sevenwondersduel } from "@/src/games/sevenwondersduel.js";
 
 afterEach(cleanup);
 
@@ -98,6 +99,20 @@ function clickFirstTally(container, catKey, index = 0){
   fireEvent.click(node.querySelectorAll(".tally-btn")[index]);
 }
 
+// Some tally categories only register nonzero points after several taps — 7 Wonders Duel's
+// treasury is floor(coins/3), so a single click leaves the score at 0 — so this clicks until the
+// score actually moves rather than assuming one tap is always enough. Every category eventually
+// moves off 0 well within maxClicks; a category that never does within it is a real bug, hence the
+// throw rather than silently giving up.
+function clickTallyUntilScoreChanges(container, catKey, maxClicks = 5){
+  const before = catScoreText(container, catKey);
+  for (let i = 0; i < maxClicks; i++){
+    clickFirstTally(container, catKey);
+    if (catScoreText(container, catKey) !== before) return;
+  }
+  throw new Error(`${catKey}: score did not change after ${maxClicks} tally clicks`);
+}
+
 function changeFirstListInput(container, catKey, value){
   openCategory(container, catKey);
   const node = catNode(container, catKey);
@@ -133,7 +148,7 @@ describe("category score and total update on real interaction", () => {
         const { container } = renderGame(game);
         const beforeCat = catScoreText(container, tallyCat);
         const beforeTotal = totalBadgeText(container);
-        clickFirstTally(container, tallyCat);
+        clickTallyUntilScoreChanges(container, tallyCat);
         expect(catScoreText(container, tallyCat)).not.toBe(beforeCat);
         expect(totalBadgeText(container)).not.toBe(beforeTotal);
       }
@@ -171,7 +186,7 @@ describe("total badge and sum strip render real numbers", () => {
   for (const { game, tallyCat, listCat } of GAME_PROBES){
     test(`${game.label}: total badge is a real scored number, not a 0 placeholder`, () => {
       const { container } = renderGame(game);
-      if (tallyCat) clickFirstTally(container, tallyCat);
+      if (tallyCat) clickTallyUntilScoreChanges(container, tallyCat);
       else changeFirstListInput(container, listCat, 5);
       expect(totalBadgeText(container)).not.toBe("0");
     });
@@ -204,6 +219,21 @@ describe("total badge and sum strip render real numbers", () => {
   }
 });
 
+// ---- (c.6) "New game" actually clears the shared military track ----
+//
+// Regression test for a real bug: militaryTrack lives on the game-state object as a sibling of
+// `players`, not inside any player, so the "newGame" reducer case silently left it untouched while
+// resetting everything else — "New game"'s own confirm dialog (app/page.jsx) promises "This clears
+// the current scores", which a stale military VP quietly breaks for whichever side it favored.
+
+test("7 Wonders Duel: dispatching newGame resets the shared militaryTrack to neutral, not just the players", () => {
+  const { getApi } = renderGame(sevenwondersduel);
+  act(() => { getApi().dispatch({ type: "setMilitaryTrack", value: -2 }); });
+  expect(getApi().gs.militaryTrack).toBe(-2);
+  act(() => { getApi().dispatch({ type: "newGame" }); });
+  expect(getApi().gs.militaryTrack).toBe(0);
+});
+
 // ---- (c) Minus is disabled at the floor, enabled above it ----
 
 describe("minus button disabled state", () => {
@@ -221,6 +251,51 @@ describe("minus button disabled state", () => {
       }
     );
   }
+});
+
+// ---- (c.5) check-chip control (7 Wonders Duel: Wonders, Progress tokens) ----
+//
+// Not covered by GAME_PROBES above — that only looks for "tallyGroup"/"list" spec types, and a
+// build-once toggle is neither. Its own coverage since it's a genuinely new control shape.
+
+describe("check-chip control (build-once toggle)", () => {
+  test("7 Wonders Duel: clicking a wonder chip updates the category score and the total", () => {
+    const { container } = renderGame(sevenwondersduel);
+    openCategory(container, "wonders");
+    const beforeCat = catScoreText(container, "wonders");
+    const beforeTotal = totalBadgeText(container);
+    const node = catNode(container, "wonders");
+    fireEvent.click(node.querySelector(".check-chip"));
+    expect(catScoreText(container, "wonders")).not.toBe(beforeCat);
+    expect(totalBadgeText(container)).not.toBe(beforeTotal);
+  });
+
+  test("7 Wonders Duel: clicking the same chip again toggles it back off", () => {
+    const { container } = renderGame(sevenwondersduel);
+    openCategory(container, "wonders");
+    const node = catNode(container, "wonders");
+    const chip = node.querySelector(".check-chip");
+    fireEvent.click(chip);
+    expect(chip.classList.contains("on")).toBe(true);
+    const onScore = catScoreText(container, "wonders");
+    fireEvent.click(chip);
+    expect(chip.classList.contains("on")).toBe(false);
+    expect(catScoreText(container, "wonders")).not.toBe(onScore);
+  });
+
+  test("7 Wonders Duel: Mathematics' pip recomputes live as other progress tokens are checked", () => {
+    const { container } = renderGame(sevenwondersduel);
+    openCategory(container, "progress");
+    const node = catNode(container, "progress");
+    const chips = [...node.querySelectorAll(".check-chip")];
+    const mathChip = chips.find(c => c.querySelector(".check-chip-name").textContent === "Mathematics");
+    const otherChip = chips.find(c => c.querySelector(".check-chip-name").textContent === "Philosophy");
+    expect(mathChip.querySelector(".pip").textContent).toBe("0"); // nothing held yet
+    fireEvent.click(otherChip); // hold one other token first
+    expect(mathChip.querySelector(".pip").textContent).toBe("3"); // 3 x (1 other, Math not yet counted)
+    fireEvent.click(mathChip);
+    expect(mathChip.querySelector(".pip").textContent).toBe("6"); // 3 x (2, including itself)
+  });
 });
 
 // ---- (d) "Enter total" freezes the category; "revert" reverts ----

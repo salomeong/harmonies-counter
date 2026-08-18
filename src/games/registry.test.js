@@ -5,6 +5,7 @@ import { GAMES, GAME_LIST, getGame } from './index.js';
 import { harmonies } from './harmonies.js';
 import { faraway } from './faraway.js';
 import { sevenwonders } from './sevenwonders.js';
+import { sevenwondersduel } from './sevenwondersduel.js';
 
 // ---- Registry wiring ----
 
@@ -12,13 +13,15 @@ test('GAMES and GAME_LIST reference the same game objects', () => {
   assert.equal(GAMES.harmonies, harmonies);
   assert.equal(GAMES.faraway, faraway);
   assert.equal(GAMES['7wonders'], sevenwonders);
-  assert.deepEqual(GAME_LIST, [harmonies, faraway, sevenwonders]);
+  assert.equal(GAMES['7wondersduel'], sevenwondersduel);
+  assert.deepEqual(GAME_LIST, [harmonies, faraway, sevenwonders, sevenwondersduel]);
 });
 
 test('getGame returns the game for a known key, and null for an unknown one', () => {
   assert.equal(getGame('harmonies'), harmonies);
   assert.equal(getGame('faraway'), faraway);
   assert.equal(getGame('7wonders'), sevenwonders);
+  assert.equal(getGame('7wondersduel'), sevenwondersduel);
   assert.equal(getGame('nonexistent'), null);
   assert.equal(getGame(''), null);
   assert.equal(getGame(undefined), null);
@@ -73,6 +76,15 @@ test('sevenwonders declares all seven categories in the printed scorepad order, 
   assert.deepEqual(sevenwonders.cats.map(c => c.key),
     ['military', 'treasury', 'wonders', 'civilian', 'science', 'commercial', 'guilds']);
   assert.equal(sevenwonders.sums, undefined);
+});
+
+test('sevenwondersduel declares its eight categories, no sums, and is locked to exactly 2 players', () => {
+  assert.deepEqual(sevenwondersduel.cats.map(c => c.key),
+    ['military', 'civilian', 'science', 'commercial', 'guilds', 'wonders', 'progress', 'treasury']);
+  assert.equal(sevenwondersduel.sums, undefined);
+  assert.equal(sevenwondersduel.minPlayers, 2);
+  assert.equal(sevenwondersduel.maxPlayers, 2);
+  assert.ok(Array.isArray(sevenwondersduel.militaryZones) && sevenwondersduel.militaryZones.length === 7);
 });
 
 // ---- Invariant: every category that declares `detail` declares its inverse ----

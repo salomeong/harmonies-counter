@@ -1,7 +1,7 @@
 # The Faithful Tally
 
-A board-game score counter for **Harmonies**, **Faraway** and **7 Wonders**. Players tally an
-end-of-game board and the app derives the score, so nobody does mental arithmetic.
+A board-game score counter for **Harmonies**, **Faraway**, **7 Wonders** and **7 Wonders Duel**.
+Players tally an end-of-game board and the app derives the score, so nobody does mental arithmetic.
 
 ## Keep this file current
 
@@ -44,7 +44,8 @@ app/
   _state/
     useTally.js     the reducer that replaced the mutable `S` object
   _components/
-    Controls.jsx    renders the control SPECS a descriptor declares (tally, ladder, list, num)
+    Controls.jsx    renders the control SPECS a descriptor declares (tally, ladder, list, num,
+                     checkGroup — the last is 7 Wonders Duel's build-once toggle, see below)
     Card.jsx        CatBody / CategoryBlock / SumStrip / PlayerCard — the LIVE, editable card
     Recap.jsx        the READ-ONLY recap — deliberately does not reuse Card.jsx's editing chrome
     ShareButton.jsx   client island on the recap and stats pages ("use client": clipboard copy)
@@ -68,6 +69,9 @@ src/                ← framework-free, and deliberately so
     harmonies.js    ← the category-descriptor contract is documented here
     faraway.js
     sevenwonders.js
+    sevenwondersduel.js  ← Civilian Victory only; see "7 Wonders Duel" below and its own header
+                     comment for why almost nothing here reuses sevenwonders.js's formulas
+    _helpers.js      pileCat() — the "typed-VP list, summed" shape both 7 Wonders games share
   ui/
     controls.js     control SPECS (data, not markup) + token art + count helpers
     art-7w.js       7 Wonders component art (cards, struck tokens, coins)
@@ -245,10 +249,10 @@ descriptor contract is missing a field — add the field instead.** That branchi
 Faraway became a second copy of the whole scorer.
 
 **`controls(p, variant)` returns control SPECS — plain data, never markup.** An array of
-`tallyGroup` / `ladder` / `list` / `num` objects (built by the helpers in `src/ui/controls.js`),
-which `app/_components/Controls.jsx` renders. Descriptors emitting HTML was the one place a game
-declaration carried view concerns, and the single thing that would have made a re-port a rewrite
-rather than a view-layer swap. A descriptor must not import React.
+`tallyGroup` / `ladder` / `list` / `num` / `checkGroup` objects (built by the helpers in
+`src/ui/controls.js`), which `app/_components/Controls.jsx` renders. Descriptors emitting HTML was
+the one place a game declaration carried view concerns, and the single thing that would have made a
+re-port a rewrite rather than a view-layer swap. A descriptor must not import React.
 
 A category can score below zero (7 Wonders' military: -1 per defeat token) by setting `min` on its
 descriptor (default 0) — it's the floor for both the rendered total `<input min>` and what
@@ -259,6 +263,67 @@ winner is a different question from the game's legal minimum). A flat-layout gam
 that wants its own card styling sets `cardClass` (Faraway sets `"fa"`) — `!game.accordion` used to
 double as that trigger, which would have silently handed Faraway's colours to any future flat game
 that didn't want them.
+
+### 7 Wonders Duel
+
+**Civilian Victory scoring only, as of 2026-08-18.** Despite sharing a box aesthetic with
+`sevenwonders.js`, Duel's scoring works almost entirely differently — no tablet²/compass²/gear²
+formula (green cards carry printed VP like blue cards), named Wonders and Progress tokens with
+fixed VP instead of generic stages, and a shared conflict pawn instead of two independent military
+tallies. See [src/games/sevenwondersduel.js](src/games/sevenwondersduel.js)'s header comment for
+the full breakdown; don't assume the base game's formulas apply here.
+
+Reaching military or scientific supremacy ends a real game of Duel immediately with **no score
+counted at all** — a session shape nothing else in this app produces. Supported since 2026-08-18:
+`app/_components/SupremacyDialog.jsx` (opened from a link on the scorer view, gated on
+`game.militaryZones` the same way the shared military track is) lets a player pick which supremacy
+and who won, then saves via `app/api/save-game/validate.mjs`'s alternate path — every seat's
+`total_score` stays NULL and `detail` is forced to `{}` server-side, `is_winner` comes from the
+client-declared, seat-validated `winnerSeat` instead of a highest total.
+
+**The API, not the client UI, is the real trust boundary here — this app has no auth.**
+`validate()` rejects a supremacy `endedBy` for any game whose descriptor doesn't declare
+`militaryZones`, even though only Duel's own UI ever offers the choice; an adversarial review
+found and live-reproduced (then cleaned up) a fabricated win for an unrelated game before this
+check existed — `SupremacyDialog` only rendering conditionally was never enough on its own.
+`app/page.jsx`'s ordinary "Save this game" button also confirms before overwriting an
+already-recorded supremacy win, since silently re-saving with `endedBy: 'score'` and no tallied
+totals would replace a correct single-winner record with a tied 0-0 row.
+
+`Recap.jsx`'s `RecapPlayerCard` renders a simplified card (no total badge, no per-category grid)
+whenever `storedTotal == null` — schema.sql's own documented meaning for that value, not a check
+invented in the component. `lib/stats.mjs` and `app/stats/[game]/page.jsx` needed **no changes** at
+all: win rate/streak/head-to-head are `is_winner` aggregates (a real boolean, always set regardless
+of ended_by), and category bests key off `scorer.fromDetail()`'s `present` array, which is
+naturally empty for a `detail: {}` row.
+
+Two things Duel needed that no earlier game did:
+
+- **A build-once toggle** (`checkChip`/`checkGroup` in `src/ui/controls.js`) for Wonders and
+  Progress tokens, each obtainable at most once per player — unlike every tally before it, which
+  increments indefinitely. Rendered as name+VP pill chips rather than drawn token art: with up to
+  12 distinct named items in one category, large token buttons don't scale the way they do for a
+  3-4 item `tallyGroup`. Placeholder fidelity by design (2026-08-18) — a later pass may add real
+  per-item art, but the chip *shape* itself isn't going anywhere; it generalizes past Duel to any
+  future game with a checklist of named, fixed-value items.
+- **Game-level (not per-player) scoring state**, for the shared conflict pawn. `gs.militaryTrack`
+  in `app/_state/useTally.js` is the second thing to ever live there — the first being Harmonies'
+  `waterSide` — and follows the identical wiring: a state field on the per-game slot, folded into
+  `variant`, read by `military.points(p, variant)` rather than by any per-player field. Rendered
+  once above both player cards (`app/page.jsx`, gated on `game.militaryZones`), never inside
+  `PlayerCard`. `military.points()` resolves which player a track position favors by `p.id === 1`
+  vs `2` — safe specifically because `minPlayers === maxPlayers === 2` permanently disables
+  add/remove-player for this game, so ids 1/2 never drift. **`militaryTrack` must be reset
+  alongside `players`/`doneCats` in the `"newGame"` reducer case** — it was missed once already (an
+  adversarial review caught it before ship): "New game"'s own confirm dialog promises to clear
+  scores, and a stale shared-track value silently awards 0/2/5/10 VP nobody put there. If a future
+  game adds a second piece of shared state, check `"newGame"` resets it too.
+
+`military` declares a sentinel `detail: () => 1, restore: () => {}` despite owning no per-player
+field — required so the recap's `present` check (`Recap.jsx`'s `UntrackedRow`) doesn't render a
+genuinely-tracked category as "not tracked when this game was saved." Read
+`sevenwondersduel.js`'s `military` category for the full reasoning before copying this pattern
+elsewhere; it only applies to a category with truly nothing per-player to store.
 
 ### Scoring model
 

@@ -8,8 +8,9 @@
 // players say "the red card" and "the purple card", so the swatch has to actually be that colour.
 
 import { numOf } from "../scoring.js";
-import { tallyControl, tallyGroup, numberList } from "../ui/controls.js";
+import { tallyControl, tallyGroup } from "../ui/controls.js";
 import { cardArt, scienceArt, warTokenArt, defeatTokenArt, coinArt } from "../ui/art-7w.js";
+import { pileCat } from "./_helpers.js";
 
 // ---- Military: four tallies, one of them worth NEGATIVE points ----
 //
@@ -182,49 +183,33 @@ const science = {
 // a typed total has no unique inverse (13 points could be one card or several), so there is no
 // `infer` and, since these categories never set canType: false, there IS an "Enter total" control
 // for them — but it always freezes into an override rather than un-inverting, exactly like
-// Harmonies' animal cards.
-function pileCat({ key, label, hint, dot, icon, noun, cardKind }){
-  return {
-    key, label, hint, dot, icon,
-    art: cardKind ? () => cardArt(cardKind) : undefined,
-    listField: key,
-    init: () => ({ [key]: [0] }),
-    points: p => p[key].reduce((sum, v) => sum + numOf(v), 0),
-    controls: p => [numberList({
-      playerId: p.id, cat: key, values: p[key], uidPrefix: "7w-",
-      inputClass: "num-input", inputmode: "numeric",
-      removeAriaLabel: `Remove this ${noun}`,
-      addLabel: `+ Add ${noun}`
-    })],
-    infer: null,
-    detail: p => p[key].map(numOf),
-    restore: (p, d) => { p[key] = Array.isArray(d) ? d.map(numOf) : []; }
-  };
-}
+// Harmonies' animal cards. `pileCat` itself lives in ./_helpers.js — 7 Wonders Duel uses the exact
+// same shape for its civilian/science/commercial/guild categories, so it moved out rather than
+// being copied.
 
 // Wonder stages are built on the board rather than played as a card, so this one takes the stone
 // brown of the wonder boards instead of a card colour.
 const wonders = pileCat({
   key: "wonders", label: "Wonder stages", dot: "--sw-brown", icon: "🏛️", noun: "wonder stage",
-  cardKind: "raw",
+  art: () => cardArt("raw"), uidPrefix: "7w-",
   hint: "VP printed on each wonder stage you built"
 });
 
 const civilian = pileCat({
   key: "civilian", label: "Civilian (blue)", dot: "--sw-blue", icon: "🏘️", noun: "blue card",
-  cardKind: "civilian",
+  art: () => cardArt("civilian"), uidPrefix: "7w-",
   hint: "VP printed on each blue civilian card"
 });
 
 const commercial = pileCat({
   key: "commercial", label: "Commercial (yellow)", dot: "--sw-yellow", icon: "🛒", noun: "yellow card",
-  cardKind: "commercial",
+  art: () => cardArt("commercial"), uidPrefix: "7w-",
   hint: "VP printed on each yellow card that scores points directly"
 });
 
 const guilds = pileCat({
   key: "guilds", label: "Guilds (purple)", dot: "--sw-purple", icon: "🎭", noun: "guild card",
-  cardKind: "guild",
+  art: () => cardArt("guild"), uidPrefix: "7w-",
   hint: "VP earned by each purple guild card from whatever it counts around the table"
 });
 

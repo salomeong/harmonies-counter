@@ -93,7 +93,7 @@ export function CategoryBlock({ game, scorer, p, catKey, variant, showRules, on 
             <button className="mini-btn" onClick={() => on.toTotal(catKey)}>✎ Enter category total</button>
           </div> : null}
         </>}
-        <div className="cat-hint">{scorer.hint(catKey)}</div>
+        {showRules ? <div className="cat-hint">{scorer.hint(catKey)}</div> : null}
       </div>
     );
   }

@@ -2056,13 +2056,16 @@
   }
   .guide-step h2{ margin: 5px 0 8px; font-size: 1.25rem; }
   .guide-step > p{ margin: 0 0 24px; color: var(--muted); font-size: 0.86rem; line-height: 1.5; }
-  /* −5/−1/[number]/+1/+5 — reuses .minus's exact circular footprint and invisible 44px tap-target
-     trick (below), rather than inventing a new button shape, since this is the same "adjust a
-     count fast, without reflowing the row" job .minus already does elsewhere. Biggest jumps
-     outermost. One line, not the single-player hero block this replaced — this now renders once
-     PER ROW, up to 7 times on screen at once, so height here is a shared cost across every player. */
+  /* .step-btn: a small circular ±N button, reusing .minus's exact footprint and invisible 44px
+     tap-target trick (below) rather than inventing a new shape — this is the same "adjust a count
+     fast, without reflowing the row" job .minus already does elsewhere. Started as Faraway-guided-
+     reveal-only ("−5/−1/[number]/+1/+5" replacing a single-player hero block, 2026-08-18), then
+     generalized the same day into app/_components/Controls.jsx's Tally component (an optional
+     `bigStep` on tallyControl()) once Treasury/River/stack tallies turned out to want the identical
+     "keep the existing ±1, add a coarse jump" treatment — so the class name stopped being
+     Fame-specific on purpose. Biggest jumps sit outermost wherever this is used. */
   .fame-stepper{ display: flex; align-items: center; justify-content: center; gap: 6px; margin: 8px 0; }
-  .fame-step{
+  .step-btn{
     width: 32px;
     height: 32px;
     flex-shrink: 0;
@@ -2081,18 +2084,18 @@
     touch-action: manipulation;
   }
   /* Same invisible-tap-target stretch as .minus (below) — kept as a literal duplicate rather than
-     a shared class, since .minus carries its own disabled-state meaning tied to a floor of 0 for a
-     tally count, not this stepper's floor of 0 for a typed fame value; keeping them textually
-     separate means a future change to one can't silently reach into the other. */
-  .fame-step::after{
+     a shared class, since .minus carries its own disabled-state meaning tied to a tally's floor,
+     not this button's; keeping them textually separate means a future change to one can't silently
+     reach into the other. */
+  .step-btn::after{
     content: "";
     position: absolute;
     left: 0; right: 0; top: 50%;
     height: 44px;
     transform: translateY(-50%);
   }
-  .fame-step.wide{ border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--accent-text); }
-  .fame-step:disabled{ opacity: 0.3; cursor: default; }
+  .step-btn.wide{ border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--accent-text); }
+  .step-btn:disabled{ opacity: 0.3; cursor: default; }
   .fame-value{
     width: 44px;
     border: 2px solid var(--accent);
@@ -2103,7 +2106,7 @@
     text-align: center;
     /* A real, always-typable input (steppers augment, never replace — CLAUDE.md's "three ways to
        enter a score"), sized for its actual constraint: individual Region cards score under 100
-       fame, so 2 digits is the realistic width, not a guess. Longhand font (see the .fame-step
+       fame, so 2 digits is the realistic width, not a guess. Longhand font (see the .step-btn
        comment on .journey-trail below for why `font: … inherit` shorthand is the wrong call here). */
     font-family: inherit;
     font-weight: 850;

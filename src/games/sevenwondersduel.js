@@ -53,7 +53,7 @@ function militaryZoneVP(zone){
 const military = {
   key: "military",
   label: "Military",
-  hint: "Set on the shared track above the player cards. The conflict pawn's final position is worth 0, 2, 5 or 10 VP to whichever side it leans toward — reaching the capital ends the game immediately instead, with no VP counted.",
+  hint: "Shared track above both cards. The pawn's final position is worth 0/2/5/10 VP to whichever side it favors — reaching the capital ends the game with no VP counted.",
   dot: "--sw-war",
   icon: "⚔️",
   init: () => ({}),
@@ -101,7 +101,7 @@ const commercial = pileCat({
 const guilds = pileCat({
   key: "guilds", label: "Guilds (purple)", dot: "--sw-purple", icon: "🎭", noun: "guild card",
   art: () => cardArt("guild"), uidPrefix: "7wd-",
-  hint: "VP earned by each purple guild card — compare card counts with your opponent at the table, then type the resulting VP"
+  hint: "VP earned by each purple guild card — compare counts with your opponent, then type the VP"
 });
 
 // ---- Wonders: 12 named boards with fixed, printed VP ----
@@ -173,7 +173,7 @@ function progressCount(p){
 const progress = {
   key: "progress",
   label: "Progress tokens",
-  hint: "Most tokens score nothing directly (they grant rule bonuses instead). Philosophy is a flat 7, Agriculture a flat 4. Mathematics scores 3 VP for every progress token you hold, including itself.",
+  hint: "Most tokens grant rule bonuses, not VP. Philosophy = 7, Agriculture = 4. Mathematics = 3 VP × tokens held, including itself.",
   dot: "--sw-green",
   icon: "⚙️",
   init: () => ({ progress: Object.fromEntries(PROGRESS_DEFS.map(t => [t.key, 0])) }),
@@ -225,7 +225,8 @@ const treasury = {
     art: coinArt,
     prefix: "×", min: 0,
     cap: "coin",
-    count: numOf(p.treasury), label: "Add a coin"
+    count: numOf(p.treasury), label: "Add a coin",
+    bigStep: 5 // same reasoning as the base game's treasury — see sevenwonders.js
   })])],
   work: p => {
     const coins = Math.max(0, Math.trunc(numOf(p.treasury)));

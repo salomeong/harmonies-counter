@@ -7,6 +7,7 @@ import { tokenArt } from "@/src/ui/controls.js";
 import { numOf } from "@/src/scoring.js";
 import { useEffect, useRef, useState } from "react";
 import { PlayerCard, CatBody, CategoryBlock } from "./Card.jsx";
+import { Controls } from "./Controls.jsx";
 import { MASCOTS } from "@/app/_lib/mascots.js";
 
 // The same drawn tokens as the tally buttons, so the strip reads as one visual language rather
@@ -179,14 +180,14 @@ function FameStepper({ value, onChange, label }){
   const step = delta => onChange(String(Math.max(0, current + delta)));
   return (
     <div className="fame-stepper">
-      <button type="button" className="fame-step wide" onClick={() => step(-5)}
+      <button type="button" className="step-btn wide" onClick={() => step(-5)}
               disabled={current <= 0} aria-label={`Subtract 5 fame — ${label}`}>−5</button>
-      <button type="button" className="fame-step" onClick={() => step(-1)}
+      <button type="button" className="step-btn" onClick={() => step(-1)}
               disabled={current <= 0} aria-label={`Subtract 1 fame — ${label}`}>−1</button>
       <input type="number" min="0" inputMode="numeric" className="fame-value" value={value}
              aria-label={label} onChange={e => onChange(e.target.value)} />
-      <button type="button" className="fame-step" onClick={() => step(1)} aria-label={`Add 1 fame — ${label}`}>+1</button>
-      <button type="button" className="fame-step wide" onClick={() => step(5)} aria-label={`Add 5 fame — ${label}`}>+5</button>
+      <button type="button" className="step-btn" onClick={() => step(1)} aria-label={`Add 1 fame — ${label}`}>+1</button>
+      <button type="button" className="step-btn wide" onClick={() => step(5)} aria-label={`Add 5 fame — ${label}`}>+5</button>
     </div>
   );
 }
@@ -314,10 +315,21 @@ function GuidedReveal({ game, scorer, gs, variant, showRules, handlersFor }){
         <div className="guide-rows">
           {gs.players.map((p, idx) => {
             const on = handlersFor(p.id);
+            const sanctuaryTotalMode = p.totals?.sanctuary != null;
             return (
               <GuideRow key={p.id} game={game} p={p} idx={idx} on={on} total={scorer.total(p)}
-                body={<CategoryBlock game={game} scorer={scorer} p={p} catKey="sanctuary"
-                  variant={variant} showRules={showRules} on={on} />} />
+                // Same shortcut, same slot as Region's — see that headExtra's comment above for why
+                // it lives beside the name rather than inside the body.
+                headExtra={!sanctuaryTotalMode ? (
+                  <button className="mini-btn guide-total-inline" onClick={() => on.toTotal("sanctuary")}
+                          aria-label={`Enter a whole Sanctuaries total instead of adding one by one for ${p.name}`}>✎ Total</button>
+                ) : null}
+                // Bypasses CategoryBlock's label/points/hint chrome the same way Region's FameStepper
+                // does: "Score Sanctuaries" is already the shared heading above every row, so a
+                // per-row "Sanctuaries" label would just repeat it eight — well, one — times over.
+                body={sanctuaryTotalMode
+                  ? <CatBody scorer={scorer} p={p} catKey="sanctuary" variant={variant} on={on} />
+                  : <Controls specs={scorer.cat("sanctuary").controls(p, variant)} on={on} />} />
             );
           })}
         </div>

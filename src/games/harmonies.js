@@ -95,7 +95,12 @@ function stackCat({ key, label, hint, dot, icon, art, noun }){
       scoreCat: key, path: key, key: s.key, art, height: s.height, prefix: "×", min: 0,
       pip: s.pts,
       count: numOf(p[key][s.key]),
-      label: `Add a height-${s.height} ${noun}, ${s.pts} point${s.pts === 1 ? "" : "s"}`
+      label: `Add a height-${s.height} ${noun}, ${s.pts} point${s.pts === 1 ? "" : "s"}`,
+      // Only the height-1 pile gets a big step: it's the cheapest token, so a full board of trees
+      // or mountains piles up the most single-height-1 taps of the three buckets. h2/h3 counts stay
+      // small enough in practice that ±1 alone is fine, and a bigStep on all three would just add
+      // visual noise to a row that's already three tally controls wide.
+      bigStep: s.key === "h1" ? 5 : undefined
     })))],
     // A stack total is ambiguous — 13 could be many bucket combinations — so it keeps the override.
     infer: null,
@@ -147,7 +152,9 @@ const water = {
       tallyGroup([tallyControl({
         scoreCat: "water", path: "river", key: "", art: "water", prefix: "len ", min: 0,
         cap: "+1 tile",
-        count: numOf(p.river), label: "Extend the river by one token"
+        count: numOf(p.river), label: "Extend the river by one token",
+        bigStep: 5 // a scoring river can run past 6+ tiles (into the "+4 each" tail); +1-only
+                   // taps make the far end of the ladder tedious to reach
       })]),
       riverLadder()
     ];

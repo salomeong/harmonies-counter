@@ -102,7 +102,9 @@ const treasury = {
     art: coinArt,
     prefix: "×", min: 0,
     cap: "coin",
-    count: numOf(p.treasury), label: "Add a coin"
+    count: numOf(p.treasury), label: "Add a coin",
+    bigStep: 5 // coin counts commonly run into the teens/twenties — a ±1-only tally means dozens
+               // of taps for a single player's final total
   })])],
   // The leftover coins are the surprise ("I had 17, why only 5?"), so name them explicitly.
   work: p => {

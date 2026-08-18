@@ -89,6 +89,11 @@ function CountChip({ spec, onCommit }){
   );
 }
 
+// spec.bigStep is an optional coarse jump (Treasury's coins, Harmonies' river length, the h1
+// stack) alongside the always-present ±1/type modes — never a replacement for them, matching the
+// Fame stepper it was generalized from (Scorer.jsx's FameStepper). Biggest jump sits outermost:
+// [-bigStep] [count chip] [minus(-1)] [+bigStep], flanking the existing pair rather than
+// interrupting it, so the count-chip/minus relationship a user already knows doesn't move.
 function Tally({ spec, on }){
   return (
     <div className="tally">
@@ -99,6 +104,14 @@ function Tally({ spec, on }){
         dangerouslySetInnerHTML={{ __html: tallyButtonHtml(spec) }}
       />
       <div className="tally-count">
+        {spec.bigStep ? (
+          <button
+            className="step-btn wide"
+            disabled={spec.count <= spec.min}
+            aria-label={`Remove ${spec.bigStep}`}
+            onClick={() => on.bump(spec, -spec.bigStep)}
+          >−{spec.bigStep}</button>
+        ) : null}
         <CountChip spec={spec} onCommit={v => on.setCount(spec, v)} />
         <button
           className="minus"
@@ -106,6 +119,13 @@ function Tally({ spec, on }){
           aria-label="Remove one"
           onClick={() => on.bump(spec, -1)}
         >−</button>
+        {spec.bigStep ? (
+          <button
+            className="step-btn wide"
+            aria-label={`Add ${spec.bigStep}`}
+            onClick={() => on.bump(spec, spec.bigStep)}
+          >+{spec.bigStep}</button>
+        ) : null}
       </div>
     </div>
   );

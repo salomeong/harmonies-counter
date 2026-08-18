@@ -68,8 +68,8 @@ test("Faraway shows every player's row for the same card at once, and one click 
 
   fireEvent.click(screen.getByRole("button", { name: "Sanctuaries →" }));
   expect(screen.getByRole("heading", { name: "Score Sanctuaries" })).toBeTruthy();
-  // Both players' Sanctuaries category blocks render together, same card-major shape.
-  expect(screen.getAllByText("Sanctuaries", { selector: ".cat-label" })).toHaveLength(2);
+  // Both players' Sanctuaries rows render together, same card-major shape as Region.
+  expect(screen.getAllByRole("button", { name: "+ Add sanctuary" })).toHaveLength(2);
 
   fireEvent.click(screen.getByRole("button", { name: "Review all players →" }));
   expect(screen.getByRole("heading", { name: "Review every traveller" })).toBeTruthy();
@@ -132,7 +132,8 @@ test("Faraway: fame steppers floor at 0 rather than going negative", () => {
 // — it's a once-per-player choice, not a per-card one, so it belongs in the row-head rather than
 // repeating under all 8 region-card screens. It should disappear once total mode is actually on
 // (CatBody's own revert control replaces it) and never appear for Sanctuaries, which has its own
-// separate "✎ Enter category total" via the shared CategoryBlock component.
+// separate "✎ Total" shortcut in the same row-head slot (2026-08-18: Sanctuaries was redesigned to
+// match Region's treatment, replacing the old full-width CategoryBlock-driven button).
 test("Faraway: the whole-Region total shortcut lives beside the name, once, and swaps for a revert once active", () => {
   render(<Harness />);
   const shortcutFor = name => screen.getByRole("button", { name: `Enter a whole Region total instead of card-by-card for ${name}` });
@@ -152,12 +153,13 @@ test("Faraway: the whole-Region total shortcut lives beside the name, once, and 
   expect(screen.getAllByRole("button", { name: /Enter a whole Region total instead/ })).toHaveLength(1);
 });
 
-test("Faraway: no whole-Region shortcut appears on the Sanctuaries screen — that category has its own", () => {
+test("Faraway: no whole-Region shortcut appears on the Sanctuaries screen — that category has its own, beside each name", () => {
   render(<Harness />);
   for (let i = 0; i < 8; i++) fireEvent.click(screen.getByRole("button", { name: /Next card →|Sanctuaries →/ }));
   expect(screen.getByRole("heading", { name: "Score Sanctuaries" })).toBeTruthy();
   expect(screen.queryByRole("button", { name: /Enter a whole Region total instead/ })).toBeNull();
-  expect(screen.getAllByRole("button", { name: "✎ Enter category total" })).toHaveLength(2);
+  expect(screen.getByRole("button", { name: "Enter a whole Sanctuaries total instead of adding one by one for Player 1" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Enter a whole Sanctuaries total instead of adding one by one for Player 2" })).toBeTruthy();
 });
 
 // Regression: a player added mid-reveal must not be silently skipped past cards they were never

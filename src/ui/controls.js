@@ -117,7 +117,13 @@ export function tallyControl(o){
     prefix: o.prefix,
     min: o.min,
     count: o.count,
-    label: o.label
+    label: o.label,
+    // Optional coarse jump alongside the always-present ±1 (tally-btn/minus) and direct-type
+    // (count chip) entry modes — a fourth way to move the SAME count, not a fourth way to enter a
+    // score. Set on categories where a realistic single tap-count would be tedious at ±1 alone
+    // (Treasury's coins, Harmonies' river length, the h1 stack) but where the token art's tap-to-
+    // +1 feel is still worth keeping, unlike Faraway's Fame field which dropped token art entirely.
+    bigStep: o.bigStep
   };
 }
 

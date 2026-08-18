@@ -23,6 +23,7 @@ import { makeScorer } from "@/src/scoring.js";
 import { GAME_LIST } from "@/src/games/index.js";
 import { sevenwonders } from "@/src/games/sevenwonders.js";
 import { sevenwondersduel } from "@/src/games/sevenwondersduel.js";
+import { harmonies } from "@/src/games/harmonies.js";
 
 afterEach(cleanup);
 
@@ -177,6 +178,36 @@ describe("category score and total update on real interaction", () => {
     clickFirstTally(container, workCat.key);
     const after = node.querySelector(".cat-work").textContent;
     expect(after).not.toBe(before);
+  });
+});
+
+// ---- (a2) The optional coarse ±bigStep buttons (2026-08-18), where a category opted in ----
+
+describe("bigStep coarse steppers", () => {
+  test("7 Wonders: Treasury's ±5 buttons move the coin count, the category score and the total", () => {
+    const { container } = renderGame(sevenwonders);
+    openCategory(container, "treasury");
+    const node = catNode(container, "treasury");
+    const plus5 = [...node.querySelectorAll(".step-btn.wide")].find(b => b.textContent === "+5");
+    const minus5 = [...node.querySelectorAll(".step-btn.wide")].find(b => b.textContent === "−5");
+    expect(plus5).toBeTruthy();
+    expect(minus5).toBeDisabled(); // 0 coins is the floor
+
+    const beforeTotal = totalBadgeText(container);
+    fireEvent.click(plus5);
+    expect(catScoreText(container, "treasury")).toBe("1"); // floor(5 coins / 3) = 1
+    expect(totalBadgeText(container)).not.toBe(beforeTotal);
+    expect(minus5).not.toBeDisabled();
+
+    fireEvent.click(minus5);
+    expect(catScoreText(container, "treasury")).toBe("0");
+    expect(minus5).toBeDisabled();
+  });
+
+  test("Harmonies: only the categories that declared bigStep get the extra buttons — fields did not", () => {
+    const { container } = renderGame(harmonies);
+    openCategory(container, "fields");
+    expect(catNode(container, "fields").querySelectorAll(".step-btn").length).toBe(0);
   });
 });
 

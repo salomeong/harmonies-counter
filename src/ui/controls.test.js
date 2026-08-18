@@ -94,7 +94,8 @@ test('tallyControl: maps every input field onto the spec unchanged, tagged with 
   });
   assert.deepEqual(spec, {
     type: 'tally', scoreCat: 'fields', path: 'fields', key: '', art: 'field',
-    height: 1, pip: 5, cap: undefined, prefix: '×', min: 0, count: 2, label: 'Add a field'
+    height: 1, pip: 5, cap: undefined, prefix: '×', min: 0, count: 2, label: 'Add a field',
+    bigStep: undefined
   });
 });
 

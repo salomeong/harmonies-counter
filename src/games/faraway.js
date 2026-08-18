@@ -33,6 +33,12 @@ function fameCat({ key, field, label, hint }){
       // rather than inventing a Faraway-specific class for the same thing 7 Wonders' pileCat()
       // categories already use it for. Found by adversarial review, 2026-08-18.
       inputClass: "num-input",
+      // Missing here (unlike 7 Wonders' pileCat() piles and Harmonies' animal cards, which both
+      // set this) meant iOS fell back to the full QWERTY keyboard rather than the numeric pad —
+      // most visible once "+ Add" started auto-focusing the new row (2026-08-18), since a
+      // programmatic focus() is where the gap actually surfaces; a manual tap on an already-mounted
+      // field can still show the right keyboard on some iOS versions even without this attribute.
+      inputmode: "numeric",
       rowHint: key === "region" ? "fame on the next revealed card" : "sanctuary fame",
       addLabel: key === "region" ? "+ Add next revealed card" : "+ Add sanctuary"
     })],

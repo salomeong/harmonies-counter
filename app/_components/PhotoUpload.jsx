@@ -98,9 +98,7 @@ export function PhotoUpload({ sessionPublicId, existingPhotos = [] }){
           setError(null); setPhotos(all => all.map(p => p.id === photo.id ? { ...p, status: "staged" } : p));
         }}>Retry upload</button> : null}
       </figure>)}
-    </div> : <button type="button" className="photo-empty" onClick={() => inputRef.current?.click()}>
-      <CameraIcon /><span><b>Keep the finished board with the score</b><small>Take a photo or choose one from your library</small></span>
-    </button>}
+    </div> : null}
     {busy ? <div className="photo-cap-note">Uploading photos…</div> : null}
     {atCap ? <div className="photo-cap-note">Up to {MAX_PHOTOS_PER_SESSION} photos per game</div> : null}
     {error ? <div className="photo-error">{error}</div> : null}

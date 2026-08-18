@@ -12,7 +12,7 @@ export default function StatsPickerPage(){
   return (
     <div className="page-inner">
       <div className="top-links"><Link href="/" className="nav-action"><NavIcon name="home" /> All games</Link></div>
-      <div className="site-name">The Faithful Tally</div>
+      <img className="site-logo" src="/assets/site-logo.png" alt="The Faithful Tally" />
       <div className="subtitle">Stats for which game?</div>
       <div className="picker-grid">
         {GAME_LIST.map(g => (

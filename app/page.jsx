@@ -123,14 +123,14 @@ export default function Page(){
           <button className="masthead-home" title="Home"
                   aria-label="Home — back to the game picker"
                   onClick={() => dispatch({ type: "setView", view: "picker" })}>
-            <img src={game ? game.logo : "/assets/logo.png"} alt={game ? game.label : "Harmonies"} />
+            <img src={game ? game.logo : "/assets/site-logo.png"} alt={game ? game.label : "The Faithful Tally"} />
             <span><NavIcon name="game" /> Home</span>
           </button>
         </div>
 
         {/* ---- Picker ---- */}
         <div className={"view" + (view === "picker" ? " active" : "")} id="view-picker">
-          <div className="site-name">The Faithful Tally</div>
+          <img className="site-logo" src="/assets/site-logo.png" alt="The Faithful Tally" />
           <div className="subtitle">Which game are we tallying?</div>
           <div className="picker-grid">
             {games.map(g => (

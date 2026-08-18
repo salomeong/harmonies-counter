@@ -213,12 +213,25 @@
     margin: 4px 0 2px;
     text-align: center;
   }
-  .site-name{
-    text-align: center;
-    font-size: 1.5rem;
-    letter-spacing: 0.06em;
-    color: var(--ink);
-    margin: 4px 0 2px;
+  .site-logo{
+    display: block;
+    width: min(85vw, 360px);
+    height: auto;
+    margin: 4px auto 2px;
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));
+  }
+  /* The light-ink version reads poorly on the dark theme's near-black background — swapping to a
+     dedicated cream-ink dark-mode asset (site-logo-dark.png) rather than fighting it with filters,
+     same reasoning --ink itself flips tone in dark mode instead of trying to brighten dark green. */
+  @media (prefers-color-scheme: dark){
+    .site-logo{ content: url("/assets/site-logo-dark.png"); filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4)); }
+  }
+  :root[data-theme="dark"] .site-logo{
+    content: url("/assets/site-logo-dark.png");
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.4));
+  }
+  :root[data-theme="light"] .site-logo{
+    filter: drop-shadow(0 2px 6px rgba(0,0,0,0.12));
   }
   .subtitle{
     text-align: center;

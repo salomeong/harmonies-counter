@@ -4,7 +4,7 @@ import Link from "next/link";
 export default function NotFound(){
   return (
     <div className="page-inner">
-      <div className="site-name">The Faithful Tally</div>
+      <img className="site-logo" src="/assets/site-logo.png" alt="The Faithful Tally" />
       <div className="subtitle">Couldn&apos;t find that game.</div>
       <div className="landing-card">
         <p className="not-found-copy">The link might be mistyped, or the game may have been removed.</p>

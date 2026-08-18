@@ -185,7 +185,7 @@ function FameStepper({ value, onChange, label }){
       <button type="button" className="step-btn" onClick={() => step(-1)}
               disabled={current <= 0} aria-label={`Subtract 1 fame — ${label}`}>−1</button>
       <input type="number" min="0" inputMode="numeric" className="fame-value" value={value}
-             aria-label={label} onChange={e => onChange(e.target.value)} />
+             aria-label={label} onFocus={e => e.target.select()} onChange={e => onChange(e.target.value)} />
       <button type="button" className="step-btn" onClick={() => step(1)} aria-label={`Add 1 fame — ${label}`}>+1</button>
       <button type="button" className="step-btn wide" onClick={() => step(5)} aria-label={`Add 5 fame — ${label}`}>+5</button>
     </div>

@@ -17,6 +17,7 @@
 //    reflows the row mid-press (CLAUDE.md, "Controls keep their place").
 
 import { useState, useRef, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { tokenArt, escapeAttr } from "@/src/ui/controls.js";
 import { numOf } from "@/src/scoring.js";
 
@@ -167,11 +168,28 @@ function Ladder({ spec, active }){
 }
 
 function NumberList({ spec, on }){
+  const inputRefs = useRef([]);
+
+  // flushSync forces the reducer's state update (and this component's re-render) to complete
+  // synchronously before focus() runs, keeping the whole thing inside the same tap — iOS Safari
+  // only opens the keyboard for a focus() call it can trace back to a real user gesture, and a
+  // focus() reached via a later effect/microtask (after the normal async render) is often too far
+  // removed from the tap for it to count. `inputRefs` is a stable ref (persists across re-renders
+  // of this same component instance), so it still reflects the new row's DOM node the instant
+  // flushSync returns, even though this closure captured spec/values from before the update.
+  function handleAdd(){
+    const newIndex = spec.values.length;
+    flushSync(() => on.listAdd(spec.cat));
+    const el = inputRefs.current[newIndex];
+    if (el){ el.focus(); el.select(); }
+  }
+
   return (
     <div className="animal-list">
       {spec.values.map((v, i) => (
         <div className="animal-row" key={i}>
           <input
+            ref={el => { inputRefs.current[i] = el; }}
             className={spec.inputClass || undefined}
             type="number"
             min={spec.min}
@@ -179,6 +197,7 @@ function NumberList({ spec, on }){
             value={v}
             data-uid={spec.uidFor(i)}
             onChange={e => on.listInput(spec.cat, i, e.target.value)}
+            onFocus={e => e.target.select()}
           />
           {spec.rowHint ? <span className="cat-hint" style={{ margin: 0 }}>{spec.rowHint}</span> : null}
           {spec.showRemove
@@ -186,7 +205,7 @@ function NumberList({ spec, on }){
             : null}
         </div>
       ))}
-      <button className="add-btn" onClick={() => on.listAdd(spec.cat)}>{spec.addLabel}</button>
+      <button className="add-btn" onClick={handleAdd}>{spec.addLabel}</button>
     </div>
   );
 }
@@ -202,6 +221,7 @@ function NumField({ spec, on }){
       placeholder={spec.placeholder}
       data-uid={spec.uid}
       onChange={e => on.numInput(spec.cat, e.target.value)}
+      onFocus={e => e.target.select()}
     />
   );
   return spec.subrow ? <div className="subrow">{input}</div> : input;

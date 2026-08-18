@@ -40,6 +40,7 @@ export function CatBody({ scorer, p, catKey, variant, on }){
             // fully collision-proof against two players sharing the exact same name — that would
             // need a seat number threaded through every call site, which nothing here has needed yet.
             aria-label={`${p.name}'s ${scorer.label(catKey)} total`}
+            onFocus={e => e.target.select()}
             onChange={e => on.totalInput(catKey, e.target.value)}
             // Inference runs on commit, not per keystroke — mid-typing the "1" of "15" would
             // otherwise snap the category back to tally mode under the cursor.

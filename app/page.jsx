@@ -271,10 +271,23 @@ export default function Page(){
           ) : null}
 
           {game && scorer ? (
-            <Scorer game={game} scorer={scorer} gs={gs} variant={variant}
+            // Keyed on the same photoKey counter PhotoUpload already uses to force a remount on
+            // "New game" — Scorer needs it too: Faraway's GuidedReveal keeps its walk position
+            // (`stage`) as local component state the reducer doesn't own, so without this a "New
+            // game" that doesn't change the player count leaves the screen sitting on whatever
+            // card it was on, showing freshly-zeroed data as if it were still mid-review. Found by
+            // adversarial review, 2026-08-18 — confirmed pre-existing (the old player-major guided
+            // reveal had the same gap), fixed here rather than left for a second report.
+            <Scorer key={`scorer-${game.key}-${photoKey}`} game={game} scorer={scorer} gs={gs} variant={variant}
                     showRules={state.showRules} handlersFor={handlersFor} dispatch={dispatch} />
           ) : null}
-          {game ? <PhotoUpload key={`${game.key}-${photoKey}`} sessionPublicId={savedPublicId} /> : null}
+          {/* Distinct prefix from Scorer's key above — they're siblings in the same children array,
+              and reusing the identical `${game.key}-${photoKey}` string for both (a real bug caught
+              live, not in review: React warned "two children with the same key" and silently
+              tripled the rendered output) collides regardless of the two being different component
+              types. Keys only need to be unique among siblings, not globally, but that still means
+              unique among THESE siblings. */}
+          {game ? <PhotoUpload key={`photo-${game.key}-${photoKey}`} sessionPublicId={savedPublicId} /> : null}
         </div>
 
         {/* ---- History ---- */}

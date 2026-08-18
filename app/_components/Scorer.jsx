@@ -4,6 +4,7 @@
 // tab strip. Both read every number straight from `scorer` during render.
 
 import { tokenArt } from "@/src/ui/controls.js";
+import { numOf } from "@/src/scoring.js";
 import { useEffect, useRef, useState } from "react";
 import { PlayerCard, CatBody, CategoryBlock } from "./Card.jsx";
 import { MASCOTS } from "@/app/_lib/mascots.js";
@@ -167,25 +168,71 @@ function ByCategory({ game, scorer, gs, variant, showRules, handlersFor, dispatc
   );
 }
 
+// Region Fame entry: −5/−1/+1/+5 steppers flanking a still-directly-typable number — steppers
+// AUGMENT typing, never replace it, per CLAUDE.md's "three ways to enter a score" (someone can
+// still just type "16" for a big card rather than tapping +5 three times). Biggest jumps sit
+// outermost, closest jumps nearest the number, the standard reading order for this kind of control.
+// Compact and horizontal by design: this renders once per player per card, so a tall, centered,
+// single-player-hero layout (the original design) compounds badly across up to 7 stacked rows.
+function FameStepper({ value, onChange, label }){
+  const current = numOf(value);
+  const step = delta => onChange(String(Math.max(0, current + delta)));
+  return (
+    <div className="fame-stepper">
+      <button type="button" className="fame-step wide" onClick={() => step(-5)}
+              disabled={current <= 0} aria-label={`Subtract 5 fame — ${label}`}>−5</button>
+      <button type="button" className="fame-step" onClick={() => step(-1)}
+              disabled={current <= 0} aria-label={`Subtract 1 fame — ${label}`}>−1</button>
+      <input type="number" min="0" inputMode="numeric" className="fame-value" value={value}
+             aria-label={label} onChange={e => onChange(e.target.value)} />
+      <button type="button" className="fame-step" onClick={() => step(1)} aria-label={`Add 1 fame — ${label}`}>+1</button>
+      <button type="button" className="fame-step wide" onClick={() => step(5)} aria-label={`Add 5 fame — ${label}`}>+5</button>
+    </div>
+  );
+}
+
+// A row per player, for the current stage's card — an editable name (renaming stays possible
+// without leaving guided reveal), an optional small `headExtra` control (the whole-category "Enter
+// total instead" shortcut lives here, not in `body` — see below), the running grand total, then
+// whatever this stage asks of them (a Fame field, or the Sanctuaries category block). Shared by
+// both stage renders below rather than duplicated, since the only thing that differs is `body`
+// (and, for the region stage only, `headExtra`).
+//
+// Every row's aria-labels carry "(traveller N)" alongside the player's name — the app doesn't
+// enforce unique names, so with all rows visible at once (unlike the old one-player-at-a-time
+// screen, where the name alone was already unambiguous) two identically-renamed players would
+// otherwise get IDENTICAL labels: a real screen-reader ambiguity and a getByLabelText collision in
+// tests, found by adversarial review and confirmed live, not hypothetical.
+function GuideRow({ game, p, idx, on, total, headExtra, body }){
+  return (
+    <div className="guide-row">
+      <div className="guide-row-head">
+        {game.mascots ? <img className="mascot small" src={MASCOTS[idx % MASCOTS.length]} alt="" /> : null}
+        <input className="guide-row-name" value={p.name} aria-label={`${p.name}'s name (traveller ${idx + 1})`}
+               onChange={e => on.rename(e.target.value)} />
+        {headExtra}
+        <span className="guide-row-total">{total}</span>
+      </div>
+      {body}
+    </div>
+  );
+}
+
 function GuidedReveal({ game, scorer, gs, variant, showRules, handlersFor }){
   const [guided, setGuided] = useState(true);
-  const [playerIndex, setPlayerIndex] = useState(0);
-  const [stage, setStage] = useState(0); // Regions 0–7, Sanctuaries 8, player review 9, final 10 — the OUTER loop; playerIndex is inner
+  const [stage, setStage] = useState(0); // Regions 0–7, Sanctuaries 8, final review 9
 
-  // A player added mid-reveal (the footer's "+ Add player" isn't gated on guided-reveal state)
-  // joins the group with the earlier cards never asked. Since stage is now shared across players,
-  // silently leaving them behind is a wrong-fame-total nobody would notice — so a GROWING player
-  // count restarts the walk at card 8 for everyone. Existing answers aren't touched, only revisited.
+  // Every stage shows every player's row together (see the render below) — there's no longer a
+  // "how far did THIS ONE player get" position, only "how far did the group get". A player added
+  // mid-reveal (the footer's "+ Add player" isn't gated on guided-reveal state) hasn't seen any of
+  // it, so a GROWING player count restarts the group's walk at card 8. Existing answers aren't
+  // touched, only revisited — and a shrinking count needs no handling at all now, since a removed
+  // player's row simply stops being one of the rows rendered.
   const prevPlayerCount = useRef(gs.players.length);
   useEffect(() => {
-    if (gs.players.length > prevPlayerCount.current) {
-      setStage(0);
-      setPlayerIndex(0);
-    } else if (playerIndex >= gs.players.length) {
-      setPlayerIndex(Math.max(0, gs.players.length - 1));
-    }
+    if (gs.players.length > prevPlayerCount.current) setStage(0);
     prevPlayerCount.current = gs.players.length;
-  }, [gs.players.length, playerIndex]);
+  }, [gs.players.length]);
 
   if (!guided) return <>
     <div className="guide-mode-switch" role="group" aria-label="Faraway scoring mode">
@@ -196,7 +243,7 @@ function GuidedReveal({ game, scorer, gs, variant, showRules, handlersFor }){
               showRules={showRules} handlersFor={handlersFor} />
   </>;
 
-  if (stage === 10) return <>
+  if (stage === 9) return <>
     <div className="guide-mode-switch" role="group" aria-label="Faraway scoring mode">
       <button className="active">Guided reveal</button>
       <button onClick={() => setGuided(false)}>Full scorecard</button>
@@ -205,47 +252,21 @@ function GuidedReveal({ game, scorer, gs, variant, showRules, handlersFor }){
       <div className="guide-eyebrow">Journey complete</div>
       <h2>Review every traveller</h2>
       <ReviewGrid game={game} scorer={scorer} players={gs.players} />
-      <button className="mini-btn" onClick={() => { setPlayerIndex(0); setStage(0); }}>Edit from the beginning</button>
+      <button className="mini-btn" onClick={() => setStage(0)}>Edit from the beginning</button>
     </div>
   </>;
 
-  const p = gs.players[playerIndex];
-  if (!p) return null;
-  const on = handlersFor(p.id);
-  const regionTotal = scorer.catPoints(p, "region");
-  const sanctuaryTotal = scorer.catPoints(p, "sanctuary");
-  const regionTotalMode = p.totals?.region != null;
   const cardNumber = 8 - stage;
 
-  // Phase-first: every player enters the SAME card before anyone moves to the next one — that's
-  // how the game is actually played round the table. playerIndex is the inner loop, stage the
-  // outer one (the reverse of a per-player walkthrough).
   function advance(){
-    if (playerIndex < gs.players.length - 1) {
-      setPlayerIndex(playerIndex + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-    setPlayerIndex(0);
-    if (stage < 9) {
-      setStage(stage + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } else setStage(10);
+    setStage(stage < 8 ? stage + 1 : 9);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  // Mirrors advance()'s one-step-at-a-time walk in reverse. Falling through to the previous
-  // phase's last player (rather than stopping dead at playerIndex 0) matters most for Faraway's
-  // own minPlayers: 1 — a lone player never leaves playerIndex 0, so scoping Back to "within this
-  // phase" only would leave it permanently disabled for every solo game.
   function back(){
-    if (playerIndex > 0) {
-      setPlayerIndex(playerIndex - 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } else if (stage > 0) {
-      setStage(stage - 1);
-      setPlayerIndex(gs.players.length - 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
+    if (stage === 0) return;
+    setStage(stage - 1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   return <>
@@ -254,50 +275,59 @@ function GuidedReveal({ game, scorer, gs, variant, showRules, handlersFor }){
       <button onClick={() => setGuided(false)}>Full scorecard</button>
     </div>
     <div className="faraway-guide">
-      <div className="guide-player-head">
-        <div><div className="guide-eyebrow">Traveller {playerIndex + 1} of {gs.players.length}</div>
-          <input value={p.name} aria-label="Player name" onChange={e => on.rename(e.target.value)} /></div>
-        <span className="total-badge">{scorer.total(p)}</span>
-      </div>
-
       <div className="journey-trail" aria-label="Reveal progress">
         {Array.from({ length: 8 }, (_, i) => <button key={i} className={stage === i ? "active" : (stage > i ? "done" : "")}
           aria-label={`Region card ${8 - i}`} onClick={() => setStage(i)}>{8 - i}</button>)}
         <button className={stage === 8 ? "active sanctuary" : (stage > 8 ? "done sanctuary" : "sanctuary")}
           onClick={() => setStage(8)} aria-label="Sanctuaries">S</button>
-        <button className={stage === 9 ? "active review" : "review"} onClick={() => setStage(9)} aria-label="Review player">✓</button>
+        <button className={stage === 9 ? "active review" : "review"} onClick={() => setStage(9)} aria-label="Review all players">✓</button>
       </div>
 
       {stage < 8 ? <div className="guide-step">
         <div className="guide-eyebrow">Region card {cardNumber}</div>
         <h2>{stage === 0 ? "Begin at the rightmost card" : "Reveal the next card to the left"}</h2>
         <p>Enter its fame only if the prerequisite is met. Otherwise leave it at zero.</p>
-        {regionTotalMode ? <CatBody scorer={scorer} p={p} catKey="region" variant={variant} on={on} /> : <>
-          <label className="guide-score-input"><span>Fame</span>
-            <input type="number" min="0" inputMode="numeric" value={p.regionFame[stage] ?? 0}
-              aria-label={`Fame for Region card ${cardNumber}`}
-              onChange={e => on.listInput("region", stage, e.target.value)} /></label>
-          <button className="mini-btn guide-total-shortcut" onClick={() => on.toTotal("region")}>Enter Region total instead</button>
-        </>}
-      </div> : stage === 8 ? <div className="guide-step">
+        <div className="guide-rows">
+          {gs.players.map((p, idx) => {
+            const on = handlersFor(p.id);
+            const regionTotalMode = p.totals?.region != null;
+            return (
+              <GuideRow key={p.id} game={game} p={p} idx={idx} on={on} total={scorer.total(p)}
+                // A whole-CATEGORY shortcut ("I already added up my fame by hand"), not a per-card
+                // one — belongs once beside the name, not repeated under all 8 region-card screens.
+                // Hidden once regionTotalMode is on: CatBody's own total-edit UI already carries a
+                // revert (↺) control, so a second entry point here would be redundant.
+                headExtra={!regionTotalMode ? (
+                  <button className="mini-btn guide-total-inline" onClick={() => on.toTotal("region")}
+                          aria-label={`Enter a whole Region total instead of card-by-card for ${p.name}`}>✎ Total</button>
+                ) : null}
+                body={regionTotalMode ? <CatBody scorer={scorer} p={p} catKey="region" variant={variant} on={on} /> :
+                  <FameStepper value={p.regionFame[stage] ?? 0}
+                    onChange={v => on.listInput("region", stage, v)}
+                    label={`${p.name}'s fame for Region card ${cardNumber} (traveller ${idx + 1})`} />} />
+            );
+          })}
+        </div>
+      </div> : <div className="guide-step">
         <div className="guide-eyebrow">After all eight Regions</div>
         <h2>Score Sanctuaries</h2>
-        <CategoryBlock game={game} scorer={scorer} p={p} catKey="sanctuary"
-          variant={variant} showRules={showRules} on={on} />
-      </div> : <div className="guide-step guide-player-review">
-        <div className="guide-eyebrow">Traveller review</div>
-        <h2>{p.name}&apos;s journey</h2>
-        <div className="guide-subtotals"><span>Regions <b>{regionTotal}</b></span><span>Sanctuaries <b>{sanctuaryTotal}</b></span></div>
-        <div className="guide-grand"><span>Total fame</span><span className="pip pip-total">{scorer.total(p)}</span></div>
+        <div className="guide-rows">
+          {gs.players.map((p, idx) => {
+            const on = handlersFor(p.id);
+            return (
+              <GuideRow key={p.id} game={game} p={p} idx={idx} on={on} total={scorer.total(p)}
+                body={<CategoryBlock game={game} scorer={scorer} p={p} catKey="sanctuary"
+                  variant={variant} showRules={showRules} on={on} />} />
+            );
+          })}
+        </div>
       </div>}
 
       <div className="guide-actions">
-        <button disabled={playerIndex === 0 && stage === 0} onClick={back}>← Back</button>
-        <button className="btn-primary" onClick={advance}>{playerIndex < gs.players.length - 1
-          ? `Score ${gs.players[playerIndex + 1].name} →`
-          : stage < 8 ? (stage === 7 ? "Sanctuaries →" : "Next card →")
-          : stage === 8 ? "Review travellers →"
-          : "Review all players →"}</button>
+        <button disabled={stage === 0} onClick={back}>← Back</button>
+        <button className="btn-primary" onClick={advance}>
+          {stage < 8 ? (stage === 7 ? "Sanctuaries →" : "Next card →") : "Review all players →"}
+        </button>
       </div>
     </div>
   </>;

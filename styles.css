@@ -1898,6 +1898,23 @@
     color: #332b20;
     font-size: 0.72rem;
   }
+  /* iOS Safari auto-zooms the whole page on focusing any input under 16px (reported against this
+     app with a screenshot, 2026-08-18) — .num-input (0.95rem), .count-input (0.85rem) and
+     .photo-caption-input (0.72rem) are all intentionally smaller than that for a compact, tap-fast
+     desktop/tablet layout, so the fix is scoped to phone widths only rather than bumping their
+     base size (zoom-on-focus doesn't affect a non-touch pointer anyway).
+     .num-input/.count-input's `width: 3.2em` is relative to THEIR OWN font-size, so bumping only
+     font-size here would have silently grown them too — verified live: .num-input 48.6px → 51.2px,
+     .count-input 43.5px → 51.2px. Pinning each one's ORIGINAL pixel width (not a shared value —
+     they had different em×font-size products to begin with) alongside the font-size bump keeps
+     the box the same size the surrounding layout was already tuned for. */
+  @media (max-width: 480px){
+    .num-input,
+    .count-input,
+    .photo-caption-input{ font-size: 16px; }
+    .num-input{ width: 48.6px; }
+    .count-input{ width: 43.5px; }
+  }
   .photo-frame figcaption{ color: #332b20; font-size: 0.72rem; padding: 7px 2px 1px; line-height: 1.3; }
   .photo-retry{ font-size: 0.68rem; margin-top: 6px; color: var(--red); }
   .photo-lightbox{ max-width: min(94vw, 1000px); overflow: visible; }
@@ -1937,7 +1954,14 @@
     background: transparent;
     color: var(--muted);
     padding: 7px 12px;
-    font: 700 0.74rem/1 inherit;
+    /* `inherit` is only legal as the WHOLE `font` shorthand, not just its trailing
+       font-family — as a component it silently invalidates the entire declaration, dropping
+       weight/size/line-height too (an adversarial review caught this across 5 rules in this
+       file, 2026-08-18; verified live via getComputedStyle, not just read). Longhand throughout. */
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.74rem;
+    line-height: 1;
   }
   .guide-mode-switch button.active{ background: var(--accent); color: #2f2416; }
   .faraway-guide{
@@ -1949,16 +1973,49 @@
     background: var(--card);
     box-shadow: 0 8px 24px rgba(38, 24, 9, 0.12);
   }
-  .guide-player-head{ display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .guide-player-head input{
-    max-width: 13em;
+  /* One row per player for the current card — replaced a one-player-at-a-time walk (2026-08-18)
+     where "Score Player 2 →" stepped between travellers before anyone moved to the next card.
+     Reuses the shape of ByCategory's .cat-row/.row-head (ByPlayer/ByCategory above) but with an
+     editable name, since guided reveal is the one place a player can be renamed without leaving
+     the flow entirely for "Full scorecard". */
+  .guide-rows{ display: flex; flex-direction: column; }
+  .guide-row{ padding: 12px 0; }
+  .guide-row + .guide-row{ border-top: 1px solid var(--line); }
+  .guide-row-head{ display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .guide-row-name{
+    flex: 1;
+    min-width: 0;
     border: 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid transparent;
     border-radius: 0;
     background: transparent;
     color: var(--ink);
-    padding: 3px 0 5px;
-    font: 800 1.12rem/1.2 inherit;
+    padding: 2px 0;
+    /* Longhand, not `font: 700 1rem/1.3 inherit` — `inherit` is only legal as the entire font
+       shorthand, so as a trailing font-family component it silently drops the whole declaration
+       (font-size included), landing this tapped input back at the browser's ~13px form-control
+       default — well under the 16px iOS Safari needs to not zoom on focus. Caught by review, not
+       by reading; verified via getComputedStyle, not just by eye. */
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 1rem;
+    line-height: 1.3;
+  }
+  .guide-row-name:focus{ outline: none; border-bottom-color: var(--line); }
+  /* Same small/muted weight as .total-badge.small, but that class's ::before injects "of " — built
+     for ByCategory's row-head, which always shows a category pip right before it ("12 of 42").
+     There's no such pip here, so reusing it verbatim read as "of 0" with nothing to pair against. */
+  .guide-row-total{ flex-shrink: 0; font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+  /* The whole-Region "type one total instead of card-by-card" shortcut, moved beside the name
+     (2026-08-18) — it used to repeat as a full-width block under the stepper on all 8 region-card
+     screens, which is 8x the vertical cost of a shortcut that's genuinely a once-per-player choice,
+     not a per-card one. Smaller than the base .mini-btn it extends, since it now sits inline
+     between a flex:1 name input and the total badge rather than owning a row to itself. */
+  .guide-total-inline{
+    flex-shrink: 0;
+    padding: 3px 9px;
+    font-size: 0.66rem;
+    white-space: nowrap;
   }
   .guide-eyebrow{
     color: var(--accent-text);
@@ -1976,7 +2033,10 @@
     border-radius: 50%;
     background: transparent;
     color: var(--muted);
-    font: 750 0.72rem/1 inherit;
+    font-family: inherit;
+    font-weight: 750;
+    font-size: 0.72rem;
+    line-height: 1;
   }
   .journey-trail button.done{ border-color: var(--accent); color: var(--accent-text); }
   .journey-trail button.done::after{ content: ""; }
@@ -1996,18 +2056,60 @@
   }
   .guide-step h2{ margin: 5px 0 8px; font-size: 1.25rem; }
   .guide-step > p{ margin: 0 0 24px; color: var(--muted); font-size: 0.86rem; line-height: 1.5; }
-  .guide-score-input{ display: grid; justify-items: center; gap: 7px; margin: 16px auto; color: var(--muted); font-size: 0.72rem; font-weight: 700; }
-  .guide-score-input input{
-    width: 104px;
+  /* −5/−1/[number]/+1/+5 — reuses .minus's exact circular footprint and invisible 44px tap-target
+     trick (below), rather than inventing a new button shape, since this is the same "adjust a
+     count fast, without reflowing the row" job .minus already does elsewhere. Biggest jumps
+     outermost. One line, not the single-player hero block this replaced — this now renders once
+     PER ROW, up to 7 times on screen at once, so height here is a shared cost across every player. */
+  .fame-stepper{ display: flex; align-items: center; justify-content: center; gap: 6px; margin: 8px 0; }
+  .fame-step{
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.68rem;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    position: relative;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  /* Same invisible-tap-target stretch as .minus (below) — kept as a literal duplicate rather than
+     a shared class, since .minus carries its own disabled-state meaning tied to a floor of 0 for a
+     tally count, not this stepper's floor of 0 for a typed fame value; keeping them textually
+     separate means a future change to one can't silently reach into the other. */
+  .fame-step::after{
+    content: "";
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    height: 44px;
+    transform: translateY(-50%);
+  }
+  .fame-step.wide{ border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--accent-text); }
+  .fame-step:disabled{ opacity: 0.3; cursor: default; }
+  .fame-value{
+    width: 44px;
     border: 2px solid var(--accent);
-    border-radius: 14px;
+    border-radius: 10px;
     background: var(--card);
     color: var(--ink);
-    padding: 12px;
+    padding: 6px 2px;
     text-align: center;
-    font: 850 1.8rem/1 inherit;
+    /* A real, always-typable input (steppers augment, never replace — CLAUDE.md's "three ways to
+       enter a score"), sized for its actual constraint: individual Region cards score under 100
+       fame, so 2 digits is the realistic width, not a guess. Longhand font (see the .fame-step
+       comment on .journey-trail below for why `font: … inherit` shorthand is the wrong call here). */
+    font-family: inherit;
+    font-weight: 850;
+    font-size: 1.15rem;
+    line-height: 1;
   }
-  .guide-total-shortcut{ display: block; margin: 18px auto 0; }
   .guide-step .category{ background: transparent; border-bottom: 0; padding-inline: 0; }
   .guide-actions{ display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
   .guide-actions > button:first-child{
@@ -2015,12 +2117,12 @@
     background: transparent;
     color: var(--muted);
     padding: 10px;
-    font: 700 0.82rem/1 inherit;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.82rem;
+    line-height: 1;
   }
   .guide-actions > button:first-child:disabled{ opacity: 0.35; }
-  .guide-subtotals{ display: grid; gap: 8px; margin: 24px 0; }
-  .guide-subtotals span{ display: flex; justify-content: space-between; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
-  .guide-grand{ display: flex; align-items: center; justify-content: space-between; font-weight: 800; }
   .guide-final h2{ margin: 5px 0 18px; }
   .guide-final .review-grid-wrap{ margin-bottom: 16px; }
 
@@ -2029,5 +2131,4 @@
     .journey-trail{ gap: 3px; margin: 14px 0; }
     .journey-trail button{ font-size: 0.64rem; }
     .guide-step{ min-height: 245px; padding: 18px 13px; }
-    .guide-player-head input{ max-width: 10em; }
   }

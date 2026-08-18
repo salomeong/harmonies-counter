@@ -26,6 +26,13 @@ function fameCat({ key, field, label, hint }){
     points: p => p[field].reduce((sum, v) => sum + numOf(v), 0),
     controls: p => [numberList({
       playerId: p.id, cat: key, values: p[field], uidPrefix: "fa-",
+      // Without inputClass, NumberList (Controls.jsx) renders a bare `.animal-row input`, which
+      // has no font-size rule anywhere — not too small, simply absent, landing on the browser's
+      // ~13px form-control default and triggering iOS Safari's zoom-on-focus on every tap in Full
+      // scorecard mode. Reusing num-input (already covered by styles.css's mobile input-zoom fix)
+      // rather than inventing a Faraway-specific class for the same thing 7 Wonders' pileCat()
+      // categories already use it for. Found by adversarial review, 2026-08-18.
+      inputClass: "num-input",
       rowHint: key === "region" ? "fame on the next revealed card" : "sanctuary fame",
       addLabel: key === "region" ? "+ Add next revealed card" : "+ Add sanctuary"
     })],
@@ -62,7 +69,7 @@ export const faraway = {
   tagline: "Journey home, reveal your fame",
   subtitle: "Journey home: reveal right to left, then score Sanctuaries",
   minPlayers: 1,
-  maxPlayers: 6,
+  maxPlayers: 7, // base game seats 6; raised to 7 per Maxx's request to match the expansion
   accordion: false,     // no collapsible drawers — both categories are always visible
   categoryMode: false,  // no Player / Category toggle
   guidedReveal: true,   // default to the physical right-to-left journey; full scorecard remains available

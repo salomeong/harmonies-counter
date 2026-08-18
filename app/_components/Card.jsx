@@ -33,7 +33,13 @@ export function CatBody({ scorer, p, catKey, variant, on }){
             inputMode="numeric"
             value={p.totals[catKey]}
             data-uid={`p${p.id}-total-${catKey}`}
-            aria-label={`${scorer.label(catKey)} total`}
+            // Includes the player's name, not just the category — CatBody renders once per player
+            // on any screen that shows multiple players' cards at once (ByCategory's rows, Faraway's
+            // guided reveal), where two identical "Region cards total" labels would otherwise be
+            // indistinguishable to a screen reader (found by adversarial review, 2026-08-18). Not
+            // fully collision-proof against two players sharing the exact same name — that would
+            // need a seat number threaded through every call site, which nothing here has needed yet.
+            aria-label={`${p.name}'s ${scorer.label(catKey)} total`}
             onChange={e => on.totalInput(catKey, e.target.value)}
             // Inference runs on commit, not per keystroke — mid-typing the "1" of "15" would
             // otherwise snap the category back to tally mode under the cursor.
